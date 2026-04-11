@@ -1,13 +1,22 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.mozilla.universalchardet.UniversalDetector;
+import java.nio.charset.StandardCharsets;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.charset.Charset;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.*;
+import org.w3c.dom.*;
+import javax.xml.parsers.*;
+
+
+
+
 
 public class LogLeverFinder {
     String filePath;
@@ -29,21 +38,21 @@ public class LogLeverFinder {
             String format = file.getName().substring(file.getName().lastIndexOf(".") + 1);
             switch (format.toLowerCase()) {
                 case "json":
-                    return findInJson(filePath, fileOutPut, level);
+                    findInJson(filePath, fileOutPut, level);
                 break;
                 case "log":
                 case "txt":
                 case "csv":
-                    return findInText(filePath);
+                    findInText(filePath, fileOutPut, level);
                 break;
                 case "xml":
-                    return findInXml(filePath);
+                    findInXml(filePath, fileOutPut, level);
                 break;
                 case "dump":
                 case "sql":
                 case "db":
                 case "sqlite":
-                    return findInPostgreSQL(filePath);
+                    findInPostgreSQL(filePath, fileOutPut, level);
                 break;
                 default:
                     throw new IllegalArgumentException("Неподдерживаемый формат" + format);
@@ -89,24 +98,119 @@ public class LogLeverFinder {
         }
     }
 
-    public void findInText (String filePath, String fileOutPut, List<String> level) throws IOException {
-       try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
-            BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
+//    public void findInText (String filePath, String fileOutPut, List<String> level) throws IOException {
+//       try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
+//            BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
+//
+//           String line = reader.readLine();
+//           // Построчное чтение файла
+//           while (line != null) {
+//               line = line.trim();
+//               if (line.isEmpty() || line.startsWith("//")) {
+//                   continue; // Пропускаем пустые строки и с комментариями
+//               }
+//               if (level.stream().anyMatch(levelItem -> line.toLowerCase().contains(levelItem.toLowerCase()))) {
+//                   writer.write(line +"\n");
+//               }
+//               //line = reader.readLine();
+//           }
+//       } catch (IOException e) {
+//           throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
+//       }
+//    }
+public void findInText(String filePath, String fileOutPut, List<String> level) throws IOException {
+    // 1. Определяем кодировку файла
+    String detectedEncoding = detectEncoding(filePath);
 
-           String line = reader.readLine();
-           // Построчное чтение файла
-           while (line != null) {
-               line = line.trim();
-               if (line.isEmpty() || line.startsWith("//")) {
-                   continue; // Пропускаем пустые строки и с комментариями
-               }
-               if (level.stream().anyMatch(levelItem -> line.toLowerCase().contains(levelItem.toLowerCase()))) {
-                   writer.write(line +"\n");
-               }
-               line = reader.readLine();
-           }
-       } catch (IOException e) {
-           throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
-       }
+    // 2. Читаем файл в обнаруженной кодировке
+    try (InputStreamReader inputStreamReader = new InputStreamReader(
+            new FileInputStream(filePath), Charset.forName(detectedEncoding));
+         BufferedReader reader = new BufferedReader(inputStreamReader);
+         // 4. Записываем в UTF-8
+         BufferedWriter writer = new BufferedWriter(
+                 (new FileWriter(fileOutPut, Charset.forName("UTF-8")))) {
+
+                 String line;
+                 while ((line = reader.readLine()) != null) {
+                     line = line.trim();
+
+                     // 3. Обрабатываем данные
+                     if (line.isEmpty() || line.startsWith("//")) {
+                         continue; // Пропускаем пустые строки и комментарии
+                     }
+
+                     if (level.stream().anyMatch(levelItem ->
+                             line.toLowerCase().contains(levelItem.toLowerCase()))) {
+                         writer.write(line + "\n");
+                     }
+                 }
+         } catch (IOException e) {
+        throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
     }
 }
+
+    // Метод для определения кодировки
+    private static String detectEncoding(String filePath) throws IOException {
+        UniversalDetector detector = new UniversalDetector(null);
+        try (InputStream inputStream = new FileInputStream(filePath)) {
+            byte[] buf = new byte[4096];
+            int nread;
+            while ((nread = inputStream.read(buf)) > 0 && !detector.isDone()) {
+                detector.handleData(buf, 0, nread);
+            }
+        }
+        detector.dataEnd();
+        String encoding = detector.getDetectedCharset();
+        detector.reset();
+        return encoding != null ? encoding : "UTF-8"; // Используем UTF-8, если не определена
+    }
+
+    public void findInXml(String filePath, String fileOutPut, List<String> level) throws Exception {
+        // Парсим XML-файл
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document document = builder.parse(new File(filePath));
+
+        // Получаем корневой элемент
+        Element root = document.getDocumentElement();
+
+        try (BufferedWriter writer = new BufferedWriter(
+                (new FileWriter(fileOutPut, StandardCharsets.UTF_8))) {
+
+            // Рекурсивно обходим все элементы XML
+            processXmlElement(root, level, writer);
+        }
+    }
+
+    private void processXmlElement(Element element, List<String> level, BufferedWriter writer) throws IOException {
+        // Проверяем содержимое текущего элемента
+        String textContent = element.getTextContent().trim();
+        if (!textContent.isEmpty() && containsLogLevel(textContent, level)) {
+            writer.write(textContent + "\n");
+        }
+
+        // Обрабатываем атрибуты элемента
+        NamedNodeMap attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            Attr attribute = (Attr) attributes.item(i);
+            String attrValue = attribute.getValue().trim();
+            if (!attrValue.isEmpty() && containsLogLevel(attrValue, level)) {
+                writer.write(attrValue + "\n");
+            }
+        }
+
+        // Рекурсивно обрабатываем дочерние элементы
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                processXmlElement((Element) child, level, writer);
+            }
+        }
+    }
+    private boolean containsLogLevel(String text, List<String> level) {
+        return level.stream().anyMatch(levelItem ->
+                text.toLowerCase().contains(levelItem.toLowerCase())
+        );
+    }
+ }
