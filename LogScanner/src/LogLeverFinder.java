@@ -1,6 +1,5 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,6 +7,7 @@ import java.nio.file.Paths;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.*;
 
 public class LogLeverFinder {
     String filePath;
@@ -23,32 +23,32 @@ public class LogLeverFinder {
     //Path path = new Path(filePath);
     boolean exist = Files.exists(Paths.get(filePath));
     boolean readable = Files.isReadable(Path.of(filePath));
-    try (exist && readable) {
-
+    try  { if (exist && readable) {
         // URLConnection.guessContentTypeFromName(filePath);
         //Files.probeContentType(Path.of(filePath));
-        String format = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-        switch (format.toLowerCase()) {
-            case "json":
-                return findInJson();
-            break;
-            case "log":
-            case "txt":
-            case "csv":
-                return findInText(filePath);
-            break;
-            case "xml":
-                return findInXml(filePath);
-            break;
-            case "dump":
-            case "sql":
-            case "db":
-            case "sqlite":
-                return findInPostgreSQL(filePath);
-            break;
-            default:
-                throw new IllegalArgumentException("Неподдерживаемый формат" + format);
+            String format = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+            switch (format.toLowerCase()) {
+                case "json":
+                    return findInJson(filePath, fileOutPut, level);
                 break;
+                case "log":
+                case "txt":
+                case "csv":
+                    return findInText(filePath);
+                break;
+                case "xml":
+                    return findInXml(filePath);
+                break;
+                case "dump":
+                case "sql":
+                case "db":
+                case "sqlite":
+                    return findInPostgreSQL(filePath);
+                break;
+                default:
+                    throw new IllegalArgumentException("Неподдерживаемый формат" + format);
+                    break;
+                }
         }
     } catch (IOException e) {
         System.err.println("Ошибка в пути файла или прав доступа: " + e.getMessage());
@@ -57,17 +57,15 @@ public class LogLeverFinder {
     public void findInJson(String filePath, String fileOutPut, List<String> level) throws IOException {
       ObjectMapper mapper = new ObjectMapper();
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
-             BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
+      try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
+           BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
 
-            String line;
-            int foundCount = 0;
-
+           String line;
             // Построчное чтение файла
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("//")) {
-                    continue; // Пропускаем пустые строки
+                    continue; // Пропускаем пустые строки и с комментариями
                 }
                 try {
                     // Парсим JSON из строки
@@ -76,7 +74,7 @@ public class LogLeverFinder {
 
                     if (levelsNode != null) {
                         String outPutLine = String.format(levelsNode.toString());
-                        writer.write(line);
+                        writer.write(line + "\n");
                     }
                 } catch (IOException e) {
                     System.err.println("Ошибка парсинга JSON в строке: " + line);
@@ -84,24 +82,31 @@ public class LogLeverFinder {
                     // Продолжаем обработку следующих строк
                 }
             }
-
         } catch (FileNotFoundException e) {
             throw new FileNotFoundException("Файл не найден: " + filePath);
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Проверяет, соответствует ли запись одному из целевых уровней логирования.
-     */
-    private static boolean matchesLogLevel(JsonNode logEntry, List<String> level) {
-        // Проверяем наличие поля "level" и его значение
-        if (logEntry.has("level")) {
-            String levels = logEntry.get("level").asText().toLowerCase();
-            return targetLevels.contains(level);
-        }
-        return false;
-    }
+    public void findInText (String filePath, String fileOutPut, List<String> level) throws IOException {
+       try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
+            BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
+
+           String line = reader.readLine();
+           // Построчное чтение файла
+           while (line != null) {
+               line = line.trim();
+               if (line.isEmpty() || line.startsWith("//")) {
+                   continue; // Пропускаем пустые строки и с комментариями
+               }
+               if (level.stream().anyMatch(levelItem -> line.toLowerCase().contains(levelItem.toLowerCase()))) {
+                   writer.write(line +"\n");
+               }
+               line = reader.readLine();
+           }
+       } catch (IOException e) {
+           throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
+       }
     }
 }
