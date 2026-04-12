@@ -7,12 +7,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.Charset;
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.*;
 import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXParseException;
 import javax.xml.parsers.*;
+import java.sql.*;
+import com.mongodb.client.*;
+import org.bson.Document;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 
 
@@ -48,12 +56,26 @@ public class LogLeverFinder {
                 case "xml":
                     findInXml(filePath, fileOutPut, level);
                 break;
+                case "bak":
+                case "du":
+                case "mdf":
+                case "ibd":
+                case "dat":
                 case "dump":
                 case "sql":
                 case "db":
                 case "sqlite":
-                    findInPostgreSQL(filePath, fileOutPut, level);
-                break;
+                    findInRelationalDB(filePath, fileOutPut, level);
+                    break;
+                case "wt":
+                case "couch":
+                case "bson":
+                    findInNotrelevantDB;
+                    break;
+                case "store":
+                case "index":
+                    finIdgraphDB;
+                    break;
                 default:
                     throw new IllegalArgumentException("Неподдерживаемый формат" + format);
                     break;
@@ -166,19 +188,32 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
     }
 
     public void findInXml(String filePath, String fileOutPut, List<String> level) throws Exception {
+        String detectedEncoding = detectEncoding(filePath);
+
         // Парсим XML-файл
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
-        Document document = builder.parse(new File(filePath));
 
-        // Получаем корневой элемент
-        Element root = document.getDocumentElement();
+        try (FileInputStream fis = new FileInputStream(filePath);
+             BufferedInputStream bis = new BufferedInputStream(fis)) {
 
-        try (BufferedWriter writer = new BufferedWriter(
-                (new FileWriter(fileOutPut, StandardCharsets.UTF_8))) {
+            InputSource source = new InputSource(bis);
+            source.setEncoding(detectedEncoding);
 
-            // Рекурсивно обходим все элементы XML
-            processXmlElement(root, level, writer);
+            Document document = builder.parse(source);
+            Element root = document.getDocumentElement();
+
+            try (BufferedWriter writer = new BufferedWriter(
+                    (new FileWriter(fileOutPut, StandardCharsets.UTF_8))) {
+                processXmlElement(root, level, writer);
+            }
+        } catch (SAXParseException e) {
+            System.err.println("Ошибка парсинга XML в файле " + filePath +
+                    ": строка " + e.getLineNumber() + ", колонка " + e.getColumnNumber());
+            throw e;
+        } catch (IOException e) {
+            System.err.println("Ошибка чтения файла " + filePath + ": " + e.getMessage());
+            throw e;
         }
     }
 
@@ -213,4 +248,43 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
                 text.toLowerCase().contains(levelItem.toLowerCase())
         );
     }
- }
+
+    public void findInRelationalDB(String jdbcUrl, String username, String password,
+                                   String query, String outputFile, List<String> levels) throws Exception {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
+             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(query)) {
+
+                ResultSetMetaData meta = rs.getMetaData();
+                int columnCount = meta.getColumnCount();
+
+                while (rs.next()) {
+                    StringBuilder row = new StringBuilder();
+                    for (int i = 1; i <= columnCount; i++) {
+                        String value = rs.getString(i);
+                        if (value != null && containsLogLevel(value, levels)) {
+                            row.append(meta.getColumnName(i))
+                                    .append(": ")
+                                    .append(value)
+                                    .append(" | ");
+                        }
+                    }
+                    if (row.length() > 0) {
+                        writer.write(row.toString().trim() + "\n");
+                    }
+                }
+            }
+        }
+
+        private boolean containsLogLevel (String text, List<String> level) {
+            return levels.stream().anyMatch(level ->
+                    text.toLowerCase().contains(level.toLowerCase())
+            );
+        }
+    }
+
+
+
+}
