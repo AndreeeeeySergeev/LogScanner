@@ -1,5 +1,6 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.bson.conversions.Bson;
 import org.mozilla.universalchardet.UniversalDetector;
 import java.nio.charset.StandardCharsets;
 import java.io.*;
@@ -11,6 +12,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.*;
+
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.Record;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
@@ -18,9 +22,8 @@ import javax.xml.parsers.*;
 import java.sql.*;
 import com.mongodb.client.*;
 import org.bson.Document;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
+import org.neo4j.driver.*;
+
 
 
 
@@ -70,11 +73,11 @@ public class LogLeverFinder {
                 case "wt":
                 case "couch":
                 case "bson":
-                    findInNotrelevantDB;
+                    findInNoSqlDB();
                     break;
                 case "store":
                 case "index":
-                    finIdgraphDB;
+                    findInGraphDB();
                     break;
                 default:
                     throw new IllegalArgumentException("Неподдерживаемый формат" + format);
@@ -285,6 +288,55 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
         }
     }
 
+    public void findInNoSqlDB(String connectionString, String databaseName,
+                              String collectionName, String filterJson,
+                              String outputFile, List<String> levels) throws Exception {
+
+        try (MongoClient mongoClient = MongoClients.create(connectionString);
+             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+
+            MongoDatabase database = mongoClient.getDatabase(databaseName);
+            MongoCollection<Document> collection = database.getCollection(collectionName);
+
+            Bson filter = filterJson != null ?
+                    com.mongodb.client.model.Filters.parse(filterJson) :
+                    new Document();
+
+            try (MongoCursor<Document> cursor = collection.find(filter).iterator()) {
+                while (cursor.hasNext()) {
+                    Document doc = cursor.next();
+                    String json = doc.toJson();
+                    if (containsLogLevel(json, levels)) {
+                        writer.write(json + "\n");
+                    }
+                }
+            }
+        }
+    }
+
+    public void findInGraphDB(String uri, String username, String password,
+                              String cypherQuery, String outputFile,
+                              List<String> levels) throws Exception {
+
+        Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
+
+
+        try (Session session = driver.session();
+             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+
+            Result result = session.run(cypherQuery);
+
+            while (result.hasNext()) {
+                Record record = result.next();
+                String recordStr = record.toString();
+                if (containsLogLevel(recordStr, levels)) {
+                    writer.write(recordStr + "\n");
+                }
+            }
+        } finally {
+            driver.close();
+        }
+    }
 
 
 }
