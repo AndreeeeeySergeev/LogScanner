@@ -314,25 +314,28 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
     public void findInRelationalDB(String jdbcUrl, String username, String password,
                                    String outputFile, List<String> levels) throws Exception {
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
-            // Проверка прав доступа
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
+             BufferedWriter writer = new BufferedWriter(
+                     new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8))) {
+
             if (!hasRequiredPrivileges(conn)) {
                 throw new SQLException("Недостаточно прав для выполнения поиска");
             }
 
-            try (BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8))) {
+            DatabaseMetaData meta = conn.getMetaData();
 
-                DatabaseMetaData meta = conn.getMetaData();
+            try (ResultSet tables = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                while (tables.next()) {
+                    String tableName = tables.getString("TABLE_NAME");
 
-                // Получаем все таблицы базы данных
-                try (ResultSet tables = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
-                    while (tables.next()) {
-                        String tableName = tables.getString("TABLE_NAME");
-                        searchTableForLevels(conn, tableName, writer, levels);
-                    }
+                    System.out.println("Обработка таблицы: " + tableName);
+
+                    searchTableForLevels(conn, tableName, writer, levels);
                 }
             }
+
+        } catch (SQLException e) {
+            throw new SQLException("Ошибка работы с БД: " + e.getMessage(), e);
         }
     }
 
@@ -375,13 +378,17 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
     }
 
     private void searchColumnForLevels(Connection conn, String tableName, String columnName,
-                                       BufferedWriter writer, List<String> levels) throws SQLException, IOException {
-        String levelsList = levels.stream()
-                .map(level -> "'" + level.replace("'", "''") + "'")  // Экранирование кавычек
-                .collect(Collectors.joining(", "));
+                                       BufferedWriter writer, List<String> levels)
+            throws SQLException, IOException {
+
+        // Формируем WHERE с LIKE
+        String whereClause = levels.stream()
+                .map(level -> "LOWER(" + columnName + ") LIKE '%" + level.toLowerCase() + "%'")
+                .collect(Collectors.joining(" OR "));
 
         String query = "SELECT * FROM " + tableName +
-                " WHERE " + columnName + " IN (" + levelsList + ")";
+                " WHERE " + whereClause +
+                " LIMIT 1000";
 
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
@@ -391,11 +398,13 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
 
             while (rs.next()) {
                 StringBuilder row = new StringBuilder();
+
                 row.append("Таблица: ").append(tableName)
                         .append(", Колонка: ").append(columnName).append(" | ");
 
                 for (int i = 1; i <= columnCount; i++) {
                     String value = rs.getString(i);
+
                     if (value != null) {
                         row.append(rsMeta.getColumnName(i))
                                 .append(": ")
@@ -404,12 +413,11 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
                     }
                 }
 
-                if (row.length() > 0) {
-                    writer.write(row.toString().trim() + "\n");
-                }
+                writer.write(row.toString().trim());
+                writer.newLine();
             }
+
         } catch (SQLException e) {
-            // Игнорируем ошибки выполнения запроса (например, если тип колонки не подходит для IN)
             System.err.println("Ошибка при запросе к таблице " + tableName +
                     ", колонке " + columnName + ": " + e.getMessage());
         }
