@@ -87,12 +87,12 @@ public class LogLeverFinder {
                     case "wt":
                     case "couch":
                     case "bson":
-                        findInNoSqlDB(/* параметры нужны */);
+                        findInNoSqlDB();
                         break;
 
                     case "store":
                     case "index":
-                        findInGraphDB(/* параметры нужны */);
+                        findInGraphDB();
                         break;
 
                     default:
@@ -105,37 +105,54 @@ public class LogLeverFinder {
     }
 
     public void findInJson(String filePath, String fileOutPut, List<String> level) throws IOException {
-      ObjectMapper mapper = new ObjectMapper();
+        ObjectMapper mapper = new ObjectMapper();
 
-      try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
-           BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
+        // 1. Определяем кодировку файла
+        String encoding = detectEncoding(filePath);
 
-           String line;
-            // Построчное чтение файла
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("//")) {
-                    continue; // Пропускаем пустые строки и с комментариями
-                }
+        JsonNode root;
+
+        // 2. Читаем JSON с учётом кодировки
+        try (InputStreamReader reader = new InputStreamReader(
+                new FileInputStream(filePath), Charset.forName(encoding))) {
+
+            root = mapper.readTree(reader);
+        }
+
+        // 3. Пишем результат в UTF-8
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(fileOutPut), StandardCharsets.UTF_8))) {
+
+            processJsonNode(root, level, writer);
+        }
+    }
+
+    private void processJsonNode(JsonNode node, List<String> level, BufferedWriter writer) throws IOException {
+
+        // Проверяем текущий узел
+        String nodeText = node.toString().toLowerCase();
+
+        if (level.stream().anyMatch(nodeText::contains)) {
+            writer.write(node.toString());
+            writer.newLine();
+        }
+
+        // Если объект — идём по полям
+        if (node.isObject()) {
+            node.fields().forEachRemaining(entry -> {
                 try {
-                    // Парсим JSON из строки
-                    JsonNode logEntry = mapper.readTree(line);
-                    JsonNode levelsNode = logEntry.findValue(String.valueOf(level));
-
-                    if (levelsNode != null) {
-                        String outPutLine = String.format(levelsNode.toString());
-                        writer.write(line + "\n");
-                    }
+                    processJsonNode(entry.getValue(), level, writer);
                 } catch (IOException e) {
-                    System.err.println("Ошибка парсинга JSON в строке: " + line);
-                    System.err.println("Детали ошибки: " + e.getMessage());
-                    // Продолжаем обработку следующих строк
+                    e.printStackTrace();
                 }
+            });
+        }
+
+        // Если массив — идём по элементам
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                processJsonNode(item, level, writer);
             }
-        } catch (FileNotFoundException e) {
-            throw new FileNotFoundException("Файл не найден: " + filePath);
-        } catch (IOException e) {
-            throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
         }
     }
 
