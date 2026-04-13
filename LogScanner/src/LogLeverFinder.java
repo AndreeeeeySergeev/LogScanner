@@ -177,33 +177,36 @@ public class LogLeverFinder {
 //       }
 //    }
 public void findInText(String filePath, String fileOutPut, List<String> level) throws IOException {
-    // 1. Определяем кодировку файла
+
     String detectedEncoding = detectEncoding(filePath);
 
-    // 2. Читаем файл в обнаруженной кодировке
-    try (InputStreamReader inputStreamReader = new InputStreamReader(
-            new FileInputStream(filePath), Charset.forName(detectedEncoding));
-         BufferedReader reader = new BufferedReader(inputStreamReader);
-         // 4. Записываем в UTF-8
+    try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(new FileInputStream(filePath), Charset.forName(detectedEncoding)));
+
          BufferedWriter writer = new BufferedWriter(
-                 (new FileWriter(fileOutPut, Charset.forName("UTF-8")))) {
+                 new OutputStreamWriter(new FileOutputStream(fileOutPut), StandardCharsets.UTF_8))) {
 
-                 String line;
-                 while ((line = reader.readLine()) != null) {
-                     line = line.trim();
+        String line;
 
-                     // 3. Обрабатываем данные
-                     if (line.isEmpty() || line.startsWith("//")) {
-                         continue; // Пропускаем пустые строки и комментарии
-                     }
+        while ((line = reader.readLine()) != null) {
+            line = line.trim();
 
-                     if (level.stream().anyMatch(levelItem ->
-                             line.toLowerCase().contains(levelItem.toLowerCase()))) {
-                         writer.write(line + "\n");
-                     }
-                 }
-         } catch (IOException e) {
-        throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
+            if (line.isEmpty() || line.startsWith("//")) {
+                continue;
+            }
+
+            String lowerLine = line.toLowerCase();
+
+            if (level.stream().anyMatch(levelItem ->
+                    lowerLine.contains(levelItem.toLowerCase()))) {
+
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+
+    } catch (IOException e) {
+        throw new IOException("Ошибка обработки файла: " + e.getMessage(), e);
     }
 }
 
@@ -224,56 +227,79 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
     }
 
     public void findInXml(String filePath, String fileOutPut, List<String> level) throws Exception {
-        String detectedEncoding = detectEncoding(filePath);
 
-        // Парсим XML-файл
+        // 1. Создаём фабрику и настраиваем безопасность
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+
         DocumentBuilder builder = factory.newDocumentBuilder();
+        org.w3c.dom.Document document;
 
-        try (FileInputStream fis = new FileInputStream(filePath);
-             BufferedInputStream bis = new BufferedInputStream(fis)) {
+        try {
+            // 2. Пробуем стандартный парсинг (XML сам определит кодировку)
+            document = builder.parse(new File(filePath));
 
-            InputSource source = new InputSource(bis);
-            source.setEncoding(detectedEncoding);
-
-            Document document = (Document) builder.parse(source);
-            Element root = document.getDocumentElement();
-
-            try (BufferedWriter writer = new BufferedWriter(
-                    (new FileWriter(fileOutPut, StandardCharsets.UTF_8))) {
-                processXmlElement(root, level, writer);
-            }
         } catch (SAXParseException e) {
-            System.err.println("Ошибка парсинга XML в файле " + filePath +
-                    ": строка " + e.getLineNumber() + ", колонка " + e.getColumnNumber());
-            throw e;
-        } catch (IOException e) {
-            System.err.println("Ошибка чтения файла " + filePath + ": " + e.getMessage());
-            throw e;
+            // 3. Если не получилось — fallback на detectEncoding
+            try (InputStream fis = new FileInputStream(filePath)) {
+                InputSource source = new InputSource(fis);
+                source.setEncoding(detectEncoding(filePath));
+                document = builder.parse(source);
+            }
+        }
+
+        Element root = document.getDocumentElement();
+
+        // 4. Запись результата в UTF-8
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(
+                        new FileOutputStream(fileOutPut),
+                        StandardCharsets.UTF_8))) {
+
+            processXmlElement(root, level, writer);
         }
     }
 
     private void processXmlElement(Element element, List<String> level, BufferedWriter writer) throws IOException {
-        // Проверяем содержимое текущего элемента
-        String textContent = element.getTextContent().trim();
-        if (!textContent.isEmpty() && containsLogLevel(textContent, level)) {
-            writer.write(textContent + "\n");
-        }
 
-        // Обрабатываем атрибуты элемента
-        NamedNodeMap attributes = element.getAttributes();
-        for (int i = 0; i < attributes.getLength(); i++) {
-            Attr attribute = (Attr) attributes.item(i);
-            String attrValue = attribute.getValue().trim();
-            if (!attrValue.isEmpty() && containsLogLevel(attrValue, level)) {
-                writer.write(attrValue + "\n");
+        // 1. Обрабатываем только прямой текст узла (без вложенных элементов)
+        if (element.getFirstChild() != null &&
+                element.getFirstChild().getNodeType() == Node.TEXT_NODE) {
+
+            String textContent = element.getFirstChild().getTextContent().trim();
+
+            if (!textContent.isEmpty() && containsLogLevel(textContent, level)) {
+                writer.write(textContent);
+                writer.newLine();
             }
         }
 
-        // Рекурсивно обрабатываем дочерние элементы
+        // 2. Обрабатываем атрибуты
+        NamedNodeMap attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            Attr attribute = (Attr) attributes.item(i);
+
+            String attrValue = attribute.getValue();
+            if (attrValue != null) {
+                attrValue = attrValue.trim();
+
+                if (!attrValue.isEmpty() && containsLogLevel(attrValue, level)) {
+                    writer.write(attrValue);
+                    writer.newLine();
+                }
+            }
+        }
+
+        // 3. Рекурсивно обрабатываем дочерние элементы
         NodeList children = element.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             Node child = children.item(i);
+
             if (child.getNodeType() == Node.ELEMENT_NODE) {
                 processXmlElement((Element) child, level, writer);
             }
