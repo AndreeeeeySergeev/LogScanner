@@ -46,54 +46,62 @@ public class LogLeverFinder {
         this.fileOutPut = fileOutPut;
     }
 
-    File file = new File(filePath);
-    //Path path = new Path(filePath);
-    boolean exist = Files.exists(Paths.get(filePath));
-    boolean readable = Files.isReadable(Path.of(filePath));
-    try  { if (exist && readable) {
-        // URLConnection.guessContentTypeFromName(filePath);
-        //Files.probeContentType(Path.of(filePath));
-            String format = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-            switch (format.toLowerCase()) {
-                case "json":
-                    findInJson(filePath, fileOutPut, level);
-                break;
-                case "log":
-                case "txt":
-                case "csv":
-                    findInText(filePath, fileOutPut, level);
-                break;
-                case "xml":
-                    findInXml(filePath, fileOutPut, level);
-                break;
-                case "bak":
-                case "du":
-                case "mdf":
-                case "ibd":
-                case "dat":
-                case "dump":
-                case "sql":
-                case "db":
-                case "sqlite":
-                    findInRelationalDB(jdbcUrl, username, password,
-                            fileOutPut, level);
-                    break;
-                case "wt":
-                case "couch":
-                case "bson":
-                    findInNoSqlDB();
-                    break;
-                case "store":
-                case "index":
-                    findInGraphDB();
-                    break;
-                default:
-                    throw new IllegalArgumentException("Неподдерживаемый формат" + format);
-                    break;
+    public void processFile() {
+        File file = new File(filePath);
+        boolean exist = Files.exists(Paths.get(filePath));
+        boolean readable = Files.isReadable(Path.of(filePath));
+
+        try {
+            if (exist && readable) {
+
+                String format = file.getName()
+                        .substring(file.getName().lastIndexOf(".") + 1);
+
+                switch (format.toLowerCase()) {
+                    case "json":
+                        findInJson(filePath, fileOutPut, level);
+                        break;
+
+                    case "log":
+                    case "txt":
+                    case "csv":
+                        findInText(filePath, fileOutPut, level);
+                        break;
+
+                    case "xml":
+                        findInXml(filePath, fileOutPut, level);
+                        break;
+
+                    case "bak":
+                    case "du":
+                    case "mdf":
+                    case "ibd":
+                    case "dat":
+                    case "dump":
+                    case "sql":
+                    case "db":
+                    case "sqlite":
+                        findInRelationalDB(jdbcUrl, username, password, fileOutPut, level);
+                        break;
+
+                    case "wt":
+                    case "couch":
+                    case "bson":
+                        findInNoSqlDB(/* параметры нужны */);
+                        break;
+
+                    case "store":
+                    case "index":
+                        findInGraphDB(/* параметры нужны */);
+                        break;
+
+                    default:
+                        throw new IllegalArgumentException("Неподдерживаемый формат " + format);
                 }
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка: " + e.getMessage());
         }
-    } catch (IOException e) {
-        System.err.println("Ошибка в пути файла или прав доступа: " + e.getMessage());
     }
 
     public void findInJson(String filePath, String fileOutPut, List<String> level) throws IOException {
