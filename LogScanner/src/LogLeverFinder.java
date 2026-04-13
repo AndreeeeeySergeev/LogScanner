@@ -1,5 +1,6 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.client.model.Filters;
 import org.bson.conversions.Bson;
 import org.mozilla.universalchardet.UniversalDetector;
 import java.nio.charset.StandardCharsets;
@@ -9,10 +10,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.*;
-
+import org.neo4j.driver.*;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
 import org.w3c.dom.*;
@@ -22,7 +25,8 @@ import javax.xml.parsers.*;
 import java.sql.*;
 import com.mongodb.client.*;
 import org.bson.Document;
-import org.neo4j.driver.*;
+import java.util.stream.*;
+
 
 
 
@@ -32,9 +36,12 @@ import org.neo4j.driver.*;
 public class LogLeverFinder {
     String filePath;
     String fileOutPut;
+    String jdbcUrl;
+    String username;
+    String password;
     private final List<String> level = Arrays.asList("critical", "error", "warning", "warn", "fatal", "alert", "emergency");
 
-    public LogLeverFinder(String filePath, String fileOutPut) throws IOException {
+    public LogLeverFinder(String filePath, String fileOutPut) throws Exception {
         this.filePath = filePath;
         this.fileOutPut = fileOutPut;
     }
@@ -68,7 +75,8 @@ public class LogLeverFinder {
                 case "sql":
                 case "db":
                 case "sqlite":
-                    findInRelationalDB(filePath, fileOutPut, level);
+                    findInRelationalDB(jdbcUrl, username, password,
+                            fileOutPut, level);
                     break;
                 case "wt":
                 case "couch":
@@ -175,7 +183,7 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
 }
 
     // Метод для определения кодировки
-    private static String detectEncoding(String filePath) throws IOException {
+    private  String detectEncoding(String filePath) throws IOException {
         UniversalDetector detector = new UniversalDetector(null);
         try (InputStream inputStream = new FileInputStream(filePath)) {
             byte[] buf = new byte[4096];
@@ -203,7 +211,7 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
             InputSource source = new InputSource(bis);
             source.setEncoding(detectedEncoding);
 
-            Document document = builder.parse(source);
+            Document document = (Document) builder.parse(source);
             Element root = document.getDocumentElement();
 
             try (BufferedWriter writer = new BufferedWriter(
@@ -253,90 +261,194 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
     }
 
     public void findInRelationalDB(String jdbcUrl, String username, String password,
-                                   String query, String outputFile, List<String> levels) throws Exception {
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
-             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+                                   String outputFile, List<String> levels) throws Exception {
 
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
+            // Проверка прав доступа
+            if (!hasRequiredPrivileges(conn)) {
+                throw new SQLException("Недостаточно прав для выполнения поиска");
+            }
 
-                ResultSetMetaData meta = rs.getMetaData();
-                int columnCount = meta.getColumnCount();
+            try (BufferedWriter writer = new BufferedWriter(
+                    new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8))) {
 
-                while (rs.next()) {
-                    StringBuilder row = new StringBuilder();
-                    for (int i = 1; i <= columnCount; i++) {
-                        String value = rs.getString(i);
-                        if (value != null && containsLogLevel(value, levels)) {
-                            row.append(meta.getColumnName(i))
-                                    .append(": ")
-                                    .append(value)
-                                    .append(" | ");
-                        }
-                    }
-                    if (row.length() > 0) {
-                        writer.write(row.toString().trim() + "\n");
+                DatabaseMetaData meta = conn.getMetaData();
+
+                // Получаем все таблицы базы данных
+                try (ResultSet tables = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                    while (tables.next()) {
+                        String tableName = tables.getString("TABLE_NAME");
+                        searchTableForLevels(conn, tableName, writer, levels);
                     }
                 }
             }
         }
+    }
 
-        private boolean containsLogLevel (String text, List<String> level) {
-            return levels.stream().anyMatch(level ->
-                    text.toLowerCase().contains(level.toLowerCase())
-            );
+
+
+
+    private boolean hasRequiredPrivileges(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT 1 FROM information_schema.tables LIMIT 1")) {
+            return rs.next(); // Если запрос выполнился — права есть
+        } catch (SQLException e) {
+            System.err.println("Недостаточно прав для доступа к information_schema: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void searchTableForLevels(Connection conn, String tableName,
+                                      BufferedWriter writer, List<String> levels) throws SQLException, IOException {
+        // Ищем колонки, которые могут содержать уровни логирования
+        List<String> candidateColumns = findCandidateColumns(conn, tableName);
+
+        for (String column : candidateColumns) {
+            searchColumnForLevels(conn, tableName, column, writer, levels);
+        }
+    }
+
+    private List<String> findCandidateColumns(Connection conn, String tableName) throws SQLException {
+        List<String> columns = new ArrayList<>();
+        List<String> keywords = Arrays.asList("level", "log", "severity", "status", "type");
+
+        try (ResultSet rs = conn.getMetaData().getColumns(null, null, tableName, null)) {
+            while (rs.next()) {
+                String columnName = rs.getString("COLUMN_NAME").toLowerCase();
+                if (keywords.stream().anyMatch(keyword -> columnName.contains(keyword))) {
+                    columns.add(columnName);
+                }
+            }
+        }
+        return columns;
+    }
+
+    private void searchColumnForLevels(Connection conn, String tableName, String columnName,
+                                       BufferedWriter writer, List<String> levels) throws SQLException, IOException {
+        String levelsList = levels.stream()
+                .map(level -> "'" + level.replace("'", "''") + "'")  // Экранирование кавычек
+                .collect(Collectors.joining(", "));
+
+        String query = "SELECT * FROM " + tableName +
+                " WHERE " + columnName + " IN (" + levelsList + ")";
+
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+
+            ResultSetMetaData rsMeta = rs.getMetaData();
+            int columnCount = rsMeta.getColumnCount();
+
+            while (rs.next()) {
+                StringBuilder row = new StringBuilder();
+                row.append("Таблица: ").append(tableName)
+                        .append(", Колонка: ").append(columnName).append(" | ");
+
+                for (int i = 1; i <= columnCount; i++) {
+                    String value = rs.getString(i);
+                    if (value != null) {
+                        row.append(rsMeta.getColumnName(i))
+                                .append(": ")
+                                .append(value)
+                                .append(" | ");
+                    }
+                }
+
+                if (row.length() > 0) {
+                    writer.write(row.toString().trim() + "\n");
+                }
+            }
+        } catch (SQLException e) {
+            // Игнорируем ошибки выполнения запроса (например, если тип колонки не подходит для IN)
+            System.err.println("Ошибка при запросе к таблице " + tableName +
+                    ", колонке " + columnName + ": " + e.getMessage());
         }
     }
 
     public void findInNoSqlDB(String connectionString, String databaseName,
-                              String collectionName, String filterJson,
-                              String outputFile, List<String> levels) throws Exception {
+                              String fileOutPut, List<String> level) throws Exception {
 
         try (MongoClient mongoClient = MongoClients.create(connectionString);
-             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+             BufferedWriter writer = new BufferedWriter(
+                     (new OutputStreamWriter(new FileOutputStream(fileOutPut), StandardCharsets.UTF_8))) {
 
-            MongoDatabase database = mongoClient.getDatabase(databaseName);
-            MongoCollection<Document> collection = database.getCollection(collectionName);
+                 MongoDatabase database = mongoClient.getDatabase(databaseName);
+                 List<String> collectionNames = database.listCollectionNames().into(new ArrayList<>());
 
-            Bson filter = filterJson != null ?
-                    com.mongodb.client.model.Filters.parse(filterJson) :
-                    new Document();
+        System.out.println("Найдено коллекций: " + collectionNames.size());
 
-            try (MongoCursor<Document> cursor = collection.find(filter).iterator()) {
-                while (cursor.hasNext()) {
-                    Document doc = cursor.next();
-                    String json = doc.toJson();
-                    if (containsLogLevel(json, levels)) {
-                        writer.write(json + "\n");
+        for (String collectionName : collectionNames) {
+                     searchCollectionForLevels(database, collectionName, writer, levels);
+                 }
+             } catch (IOException e) {
+                System.err.println(e.getMessage);
+             }
+        }
+    }
+
+    private void searchCollectionForLevels(MongoDatabase database, String collectionName,
+                                           BufferedWriter writer, List<String> levels) throws IOException {
+        MongoCollection<Document> collection = database.getCollection(collectionName);
+
+        // Создаём фильтр: ищем документы, где ЛЮБОЕ поле содержит одно из значений levels
+        List<Bson> orConditions = new ArrayList<>();
+        for (String level : levels) {
+            orConditions.add(Filters.regex("\\$**", level, "i")); // Поиск по всем полям, без учёта регистра
+        }
+
+        Bson filter = Filters.or(orConditions);
+
+        try (MongoCursor<Document> cursor = collection.find(filter).iterator()) {
+            int foundCount = 0;
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                writer.write("Коллекция: " + collectionName + " | " + doc.toJson() + "\n");
+                foundCount++;
+            }
+            if (foundCount > 0) {
+                System.out.println("В коллекции '" + collectionName + "' найдено " + foundCount + " документов");
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка при поиске в коллекции " + collectionName + ": " + e.getMessage());
+        }
+    }
+
+public void findInGraphDB(String uri, String username, String password,
+                          List<String> levels, String outputFile) throws Exception {
+
+    Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
+
+    try (Session session = driver.session();
+         BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+
+        // Запрос: получаем все узлы и их свойства
+        String cypherQuery = "MATCH (n) RETURN labels(n) AS nodeLabels, n{.*} AS properties";
+        Result result = session.run(cypherQuery);
+
+        while (result.hasNext()) {
+            Record record = result.next();
+            List<String> nodeLabels = record.get("nodeLabels").asList(Value::asString);
+            Map<String, Object> properties = record.get("properties").asMap();
+
+            // Проверяем каждое свойство на соответствие уровням логирования
+            boolean foundMatch = false;
+            for (Map.Entry<String, Object> entry : properties.entrySet()) {
+                if (entry.getValue() instanceof String) {
+                    String propValue = (String) entry.getValue();
+                    if (levels.contains(propValue)) {
+                        foundMatch = true;
+                        break;
                     }
                 }
             }
-        }
-    }
 
-    public void findInGraphDB(String uri, String username, String password,
-                              String cypherQuery, String outputFile,
-                              List<String> levels) throws Exception {
-
-        Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
-
-
-        try (Session session = driver.session();
-             BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
-
-            Result result = session.run(cypherQuery);
-
-            while (result.hasNext()) {
-                Record record = result.next();
-                String recordStr = record.toString();
-                if (containsLogLevel(recordStr, levels)) {
-                    writer.write(recordStr + "\n");
-                }
+            if (foundMatch) {
+                String formattedRecord = String.format("Labels: %s, Properties: %s",
+                        nodeLabels, properties);
+                writer.write(formattedRecord + "\n");
             }
-        } finally {
-            driver.close();
         }
+    } finally {
+        driver.close();
     }
-
-
+}
 }
