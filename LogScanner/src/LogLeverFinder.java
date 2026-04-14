@@ -3,7 +3,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.client.model.Filters;
 import org.bson.conversions.Bson;
 import org.mozilla.universalchardet.UniversalDetector;
-import java.nio.charset.StandardCharsets;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,11 +24,6 @@ import javax.xml.parsers.*;
 import java.sql.*;
 import com.mongodb.client.*;
 import org.bson.Document;
-import java.util.stream.*;
-
-
-
-
 
 
 
@@ -39,6 +33,8 @@ public class LogLeverFinder {
     String jdbcUrl;
     String username;
     String password;
+    String connectionString;
+    String uri;
     private final List<String> level = Arrays.asList("critical", "error", "warning", "warn", "fatal", "alert", "emergency");
 
     public LogLeverFinder(String filePath, String fileOutPut) throws Exception {
@@ -87,12 +83,12 @@ public class LogLeverFinder {
                     case "wt":
                     case "couch":
                     case "bson":
-                        findInNoSqlDB();
+                        findInNoSqlDB(connectionString, fileOutPut, level);
                         break;
 
                     case "store":
                     case "index":
-                        findInGraphDB();
+                        findInGraphDB(uri, username, password, level, fileOutPut);
                         break;
 
                     default:
@@ -156,26 +152,6 @@ public class LogLeverFinder {
         }
     }
 
-//    public void findInText (String filePath, String fileOutPut, List<String> level) throws IOException {
-//       try (BufferedReader reader = new BufferedReader(new FileReader(filePath));
-//            BufferedWriter writer = new BufferedWriter(new FileWriter(fileOutPut))) {
-//
-//           String line = reader.readLine();
-//           // Построчное чтение файла
-//           while (line != null) {
-//               line = line.trim();
-//               if (line.isEmpty() || line.startsWith("//")) {
-//                   continue; // Пропускаем пустые строки и с комментариями
-//               }
-//               if (level.stream().anyMatch(levelItem -> line.toLowerCase().contains(levelItem.toLowerCase()))) {
-//                   writer.write(line +"\n");
-//               }
-//               //line = reader.readLine();
-//           }
-//       } catch (IOException e) {
-//           throw new IOException("Произошла ошибка при обработке файла: " + e.getMessage(), e);
-//       }
-//    }
 public void findInText(String filePath, String fileOutPut, List<String> level) throws IOException {
 
     String detectedEncoding = detectEncoding(filePath);
@@ -381,14 +357,29 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
                                        BufferedWriter writer, List<String> levels)
             throws SQLException, IOException {
 
-        // Формируем WHERE с LIKE
+        // 1. Определяем тип БД
+        String dbProduct = conn.getMetaData().getDatabaseProductName();
+
+        String limitClause;
+
+        if (dbProduct.toLowerCase().contains("oracle")) {
+            limitClause = " FETCH FIRST 1000 ROWS ONLY";
+        } else if (dbProduct.toLowerCase().contains("microsoft")
+                || dbProduct.toLowerCase().contains("sql server")) {
+            limitClause = " OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY";
+        } else {
+            limitClause = " LIMIT 1000";
+        }
+
+        // 2. Формируем WHERE
         String whereClause = levels.stream()
                 .map(level -> "LOWER(" + columnName + ") LIKE '%" + level.toLowerCase() + "%'")
                 .collect(Collectors.joining(" OR "));
 
+        // 3. Формируем запрос
         String query = "SELECT * FROM " + tableName +
                 " WHERE " + whereClause +
-                " LIMIT 1000";
+                limitClause;
 
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
@@ -492,43 +483,55 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
         }
     }
 
-public void findInGraphDB(String uri, String username, String password,
-                          List<String> levels, String outputFile) throws Exception {
+    public void findInGraphDB(String uri, String username, String password,
+                              List<String> levels, String outputFile) throws Exception {
 
-    Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
+        try (Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
+             Session session = driver.session();
+             BufferedWriter writer = new BufferedWriter(
+                     new FileWriter(outputFile, StandardCharsets.UTF_8))) {
 
-    try (Session session = driver.session();
-         BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+            String cypherQuery =
+                    "MATCH (n) RETURN labels(n) AS nodeLabels, n{.*} AS properties LIMIT 1000";
 
-        // Запрос: получаем все узлы и их свойства
-        String cypherQuery = "MATCH (n) RETURN labels(n) AS nodeLabels, n{.*} AS properties";
-        Result result = session.run(cypherQuery);
+            Result result = session.run(cypherQuery);
 
-        while (result.hasNext()) {
-            Record record = result.next();
-            List<String> nodeLabels = record.get("nodeLabels").asList(Value::asString);
-            Map<String, Object> properties = record.get("properties").asMap();
+            while (result.hasNext()) {
+                Record record = result.next();
 
-            // Проверяем каждое свойство на соответствие уровням логирования
-            boolean foundMatch = false;
-            for (Map.Entry<String, Object> entry : properties.entrySet()) {
-                if (entry.getValue() instanceof String) {
-                    String propValue = (String) entry.getValue();
-                    if (levels.contains(propValue)) {
-                        foundMatch = true;
-                        break;
+                List<String> nodeLabels = record.get("nodeLabels").asList(Value::asString);
+                Map<String, Object> properties = record.get("properties").asMap();
+
+                boolean foundMatch = false;
+
+                for (Map.Entry<String, Object> entry : properties.entrySet()) {
+
+                    if (entry.getValue() instanceof String) {
+
+                        String value = ((String) entry.getValue()).toLowerCase();
+
+                        if (levels.stream().anyMatch(level ->
+                                value.contains(level.toLowerCase()))) {
+
+                            foundMatch = true;
+                            break;
+                        }
                     }
+                }
+
+                if (foundMatch) {
+                    String formattedRecord = String.format(
+                            "Labels: %s, Properties: %s",
+                            nodeLabels, properties
+                    );
+
+                    writer.write(formattedRecord);
+                    writer.newLine();
                 }
             }
 
-            if (foundMatch) {
-                String formattedRecord = String.format("Labels: %s, Properties: %s",
-                        nodeLabels, properties);
-                writer.write(formattedRecord + "\n");
-            }
+        } catch (Exception e) {
+            throw new Exception("Ошибка при работе с Neo4j: " + e.getMessage(), e);
         }
-    } finally {
-        driver.close();
     }
-}
 }
