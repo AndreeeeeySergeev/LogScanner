@@ -423,51 +423,72 @@ public void findInText(String filePath, String fileOutPut, List<String> level) t
         }
     }
 
-    public void findInNoSqlDB(String connectionString, String databaseName,
-                              String fileOutPut, List<String> level) throws Exception {
+    public void findInNoSqlDB(String connectionString,
+                              String fileOutPut,
+                              List<String> levels) throws Exception {
 
         try (MongoClient mongoClient = MongoClients.create(connectionString);
              BufferedWriter writer = new BufferedWriter(
-                     (new OutputStreamWriter(new FileOutputStream(fileOutPut), StandardCharsets.UTF_8))) {
+                     new OutputStreamWriter(new FileOutputStream(fileOutPut), StandardCharsets.UTF_8))) {
 
-                 MongoDatabase database = mongoClient.getDatabase(databaseName);
-                 List<String> collectionNames = database.listCollectionNames().into(new ArrayList<>());
+            // 1. Получаем ВСЕ базы
+            MongoIterable<String> databaseNames = mongoClient.listDatabaseNames();
 
-        System.out.println("Найдено коллекций: " + collectionNames.size());
+            for (String dbName : databaseNames) {
 
-        for (String collectionName : collectionNames) {
-                     searchCollectionForLevels(database, collectionName, writer, levels);
-                 }
-             } catch (IOException e) {
-                System.err.println(e.getMessage);
-             }
+                System.out.println("Обработка базы: " + dbName);
+
+                MongoDatabase database = mongoClient.getDatabase(dbName);
+
+                List<String> collectionNames =
+                        database.listCollectionNames().into(new ArrayList<>());
+
+                for (String collectionName : collectionNames) {
+
+                    System.out.println("  Коллекция: " + collectionName);
+
+                    searchCollectionForLevels(database, collectionName, writer, levels);
+                }
+            }
+
+        } catch (Exception e) {
+            throw new Exception("Ошибка при работе с MongoDB: " + e.getMessage(), e);
         }
     }
 
+
     private void searchCollectionForLevels(MongoDatabase database, String collectionName,
                                            BufferedWriter writer, List<String> levels) throws IOException {
+
         MongoCollection<Document> collection = database.getCollection(collectionName);
 
-        // Создаём фильтр: ищем документы, где ЛЮБОЕ поле содержит одно из значений levels
-        List<Bson> orConditions = new ArrayList<>();
-        for (String level : levels) {
-            orConditions.add(Filters.regex("\\$**", level, "i")); // Поиск по всем полям, без учёта регистра
-        }
+        try (MongoCursor<Document> cursor = collection.find().limit(1000).iterator()) {
 
-        Bson filter = Filters.or(orConditions);
-
-        try (MongoCursor<Document> cursor = collection.find(filter).iterator()) {
             int foundCount = 0;
+
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
-                writer.write("Коллекция: " + collectionName + " | " + doc.toJson() + "\n");
-                foundCount++;
+
+                String json = doc.toJson().toLowerCase();
+
+                boolean match = levels.stream()
+                        .anyMatch(level -> json.contains(level.toLowerCase()));
+
+                if (match) {
+                    writer.write("Коллекция: " + collectionName + " | " + doc.toJson());
+                    writer.newLine();
+                    foundCount++;
+                }
             }
+
             if (foundCount > 0) {
-                System.out.println("В коллекции '" + collectionName + "' найдено " + foundCount + " документов");
+                System.out.println("В коллекции '" + collectionName +
+                        "' найдено " + foundCount + " документов");
             }
+
         } catch (Exception e) {
-            System.err.println("Ошибка при поиске в коллекции " + collectionName + ": " + e.getMessage());
+            System.err.println("Ошибка при поиске в коллекции " + collectionName +
+                    ": " + e.getMessage());
         }
     }
 
