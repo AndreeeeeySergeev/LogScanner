@@ -1,8 +1,6 @@
 package normalizer.timestamp;
 
-import normalizer.timestamp.impl.EpochTimestampParser;
-import normalizer.timestamp.impl.IsoTimestampParser;
-import normalizer.timestamp.impl.SyslogTimestampParser;
+import normalizer.timestamp.impl.*;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,16 +13,17 @@ public class TimestampExtractor {
             new SyslogTimestampParser()
     );
 
-    public Instant extract(String message) {
+    public TimestampParseResult extract(String message) {
 
         for (TimestampParser parser : parsers) {
-            Instant result = parser.parse(message);
+            TimestampParseResult result = parser.parse(message);
 
-            if (result != null) {
+            if (result.isParsed()) {
                 return result;
             }
         }
 
-        return Instant.now(); // fallback
+        // fallback
+        return new TimestampParseResult(Instant.now(), false);
     }
 }

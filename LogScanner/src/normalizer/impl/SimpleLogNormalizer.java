@@ -3,6 +3,7 @@ package normalizer.impl;
 import model.LogEvent;
 import normalizer.LogNormalizer;
 import normalizer.timestamp.TimestampExtractor;
+import normalizer.timestamp.TimestampParseResult;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,12 +25,19 @@ public class SimpleLogNormalizer implements LogNormalizer {
         // 1. Нормализация уровня
         String normalizedLevel = extractLevel(message);
 
-        // 2. Нормализация timestamp (пока fallback)
-        Instant timestamp = extractTimestamp(message);
+        // 2. Парсинг timestamp
+        TimestampParseResult tsResult = timestampExtractor.extract(message);
+        Instant timestamp = tsResult.getTimestamp();
 
-        // 3. Источник (пока простой)
+        // 🔥 (опционально, но очень полезно)
+        if (!tsResult.isParsed()) {
+            System.out.println("⚠ Timestamp не найден, используем fallback: " + message);
+        }
+
+        // 3. Определение источника
         String source = detectSource(message);
 
+        // 4. Создание нормализованного события
         return new LogEvent(
                 timestamp,
                 source,
@@ -51,15 +59,14 @@ public class SimpleLogNormalizer implements LogNormalizer {
         return "UNKNOWN";
     }
 
-    private Instant extractTimestamp(String message) {
-        return timestampExtractor.extract(message);
-    }
-
     private String detectSource(String message) {
 
-        // пока просто
-        if (message.contains("nginx")) return "NGINX";
-        if (message.contains("firewall")) return "FIREWALL";
+        String lower = message.toLowerCase();
+
+        if (lower.contains("nginx")) return "NGINX";
+        if (lower.contains("firewall")) return "FIREWALL";
+        if (lower.contains("postgres")) return "POSTGRES";
+        if (lower.contains("mysql")) return "MYSQL";
 
         return "UNKNOWN";
     }
