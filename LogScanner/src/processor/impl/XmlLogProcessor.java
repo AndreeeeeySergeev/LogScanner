@@ -1,11 +1,13 @@
 package processor.impl;
 
 import processor.LogProcessor;
+import util.FileUtils;
 
 import javax.xml.stream.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static util.EncodingDetector.detectEncoding;
 
@@ -19,10 +21,10 @@ public class XmlLogProcessor implements LogProcessor {
         // 1. Нормализуем уровни один раз
         List<String> normalizedLevels = levels.stream()
                 .map(String::toLowerCase)
-                .toList();
+                .collect(Collectors.toList());
 
         // 2. Определяем кодировку
-        String encoding = detectEncoding(filePath);
+        String encoding = FileUtils.detectEncoding(filePath);
 
         // 3. Настраиваем безопасный XML
         XMLInputFactory factory = XMLInputFactory.newInstance();

@@ -17,7 +17,7 @@ public class NoSqlDBProcessor implements LogProcessor {
                         String fileOutput,
                         List<String> levels) throws Exception {
 
-        // 🔥 нормализуем уровни один раз
+        //нормализуем уровни один раз
         List<String> normalizedLevels = levels.stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toList());

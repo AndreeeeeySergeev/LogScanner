@@ -3,6 +3,7 @@ package processor.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import processor.LogProcessor;
+import util.FileUtils;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -22,7 +23,7 @@ public class JsonLogProcessor implements LogProcessor {
         ObjectMapper mapper = new ObjectMapper();
 
         // 1. Определяем кодировку
-        String encoding = detectEncoding(filePath);
+        String encoding = FileUtils.detectEncoding(filePath);
 
         JsonNode root;
 

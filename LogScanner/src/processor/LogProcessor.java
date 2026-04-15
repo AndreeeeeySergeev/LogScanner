@@ -1,10 +1,10 @@
 package processor;
 
+import model.LogEvent;
 import java.util.List;
 
 public interface LogProcessor {
 
-    void process(String inputPath,
-                 String outputPath,
-                 List<String> levels) throws Exception;
+    List<LogEvent> process(String source,
+                           List<String> levels) throws Exception;
 }

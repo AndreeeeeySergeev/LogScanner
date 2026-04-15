@@ -1,6 +1,7 @@
 package processor.impl;
 
 import processor.LogProcessor;
+import util.FileUtils;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -17,7 +18,7 @@ public class TextLogProcessor implements LogProcessor {
                         List<String> levels) throws Exception {
 
         // 1. Определяем кодировку
-        String encoding = detectEncoding(filePath);
+        String encoding = FileUtils.detectEncoding(filePath);
 
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(
