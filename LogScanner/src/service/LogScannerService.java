@@ -1,5 +1,7 @@
 package service;
 
+import alert.AlertService;
+import alert.impl.SimpleAlertService;
 import model.LogEvent;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 public class LogScannerService {
 
     private final LogWriter writer;
+    private final AlertService alertService = new SimpleAlertService();
 
     // 👉 можно потом подменять (например, на DB writer)
     public LogScannerService() {
@@ -34,17 +37,16 @@ public class LogScannerService {
                 LogProcessorFactory.getProcessor(format);
 
         List<LogEvent> events =
-                processor.process(filePath, levels);
-
+                processor.process(filePath, outputPath, levels);
 
         LogNormalizer normalizer = new SimpleLogNormalizer(levels);
 
-        List<LogEvent> normalizedEvents = events.stream()
-                .map(normalizer::normalize)
-                .collect(Collectors.toList());
+        for (LogEvent event : events) {
 
-        writer.write(normalizedEvents, outputPath);
+            LogEvent normalized = normalizer.normalize(event);
 
-        System.out.println("Обработано событий: " + normalizedEvents.size());
+
+            alertService.process(normalized);
+        }
     }
 }
