@@ -2,6 +2,7 @@ package normalizer.impl;
 
 import model.LogEvent;
 import normalizer.LogNormalizer;
+import normalizer.timestamp.TimestampExtractor;
 
 import java.time.Instant;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.List;
 public class SimpleLogNormalizer implements LogNormalizer {
 
     private final List<String> levels;
+    private final TimestampExtractor timestampExtractor = new TimestampExtractor();
 
     public SimpleLogNormalizer(List<String> levels) {
         this.levels = levels;
@@ -50,11 +52,7 @@ public class SimpleLogNormalizer implements LogNormalizer {
     }
 
     private Instant extractTimestamp(String message) {
-
-        // пока просто заглушка
-        // потом добавим regex под реальные форматы
-
-        return Instant.now();
+        return timestampExtractor.extract(message);
     }
 
     private String detectSource(String message) {

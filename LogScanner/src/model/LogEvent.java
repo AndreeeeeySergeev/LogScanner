@@ -1,5 +1,6 @@
 package model;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -23,6 +24,9 @@ public class LogEvent {
         this.source = source;
         this.timestamp = timestamp;
         this.metadata = metadata;
+    }
+
+    public LogEvent(Instant timestamp, String source, String normalizedLevel, String message) {
     }
 
 
