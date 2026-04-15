@@ -1,4 +1,7 @@
 package normalizer;
 
-public class LogNormalizer {
+import model.LogEvent;
+
+public interface LogNormalizer {
+    LogEvent normalize(LogEvent event);
 }

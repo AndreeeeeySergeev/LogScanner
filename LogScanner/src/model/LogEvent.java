@@ -12,8 +12,6 @@ public class LogEvent {
 
     private Map<String, Object> metadata; // дополнительные данные
 
-    public LogEvent() {}
-
     public LogEvent(String message,
                     String level,
                     String source,
