@@ -1,79 +1,76 @@
 package processor.impl;
 
+import model.LogEvent;
 import org.neo4j.driver.*;
 import processor.LogProcessor;
 import org.neo4j.driver.Record;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class GraphLogProcessor implements LogProcessor {
 
     @Override
-    public void process(String uri,
-                        String outputFile,
-                        List<String> levels) throws Exception {
+    public List<LogEvent> process(String uri, List<String> levels) throws Exception {
 
-        try (Driver driver = GraphDatabase.driver(uri);
-             Session session = driver.session();
-             BufferedWriter writer = new BufferedWriter(
-                     new FileWriter(outputFile, StandardCharsets.UTF_8))) {
+        List<LogEvent> events = new ArrayList<>();
 
-            String query = buildQuery();
+        // (потом вынести
+        String username = "neo4j";
+        String password = "password";
+
+        try (Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
+             Session session = driver.session()) {
+
+            String query = "MATCH (n) RETURN labels(n) AS labels, n{.*} AS props LIMIT 1000";
 
             Result result = session.run(query);
 
             while (result.hasNext()) {
+
                 Record record = result.next();
 
-                List<String> labels = record.get("nodeLabels").asList(Value::asString);
-                Map<String, Object> properties = record.get("properties").asMap();
+                List<String> labels = record.get("labels").asList(Value::asString);
+                Map<String, Object> properties = record.get("props").asMap();
 
-                if (containsLogLevel(properties, levels)) {
-                    writeResult(writer, labels, properties);
+                if (containsLevel(properties, levels)) {
+
+                    String message = formatNode(labels, properties);
+
+                    events.add(new LogEvent(
+                            Instant.now(),
+                            "GRAPH_DB",
+                            "UNKNOWN",
+                            message
+                    ));
                 }
             }
-
-        } catch (Exception e) {
-            throw new Exception("Ошибка при работе с Graph DB: " + e.getMessage(), e);
         }
+
+        return events;
     }
 
-    private String buildQuery() {
-        return "MATCH (n) RETURN labels(n) AS nodeLabels, n{.*} AS properties LIMIT 1000";
-    }
-
-    private boolean containsLogLevel(Map<String, Object> properties, List<String> levels) {
+    private boolean containsLevel(Map<String, Object> properties, List<String> levels) {
 
         for (Object value : properties.values()) {
+
             if (value instanceof String) {
-                String strValue = (String) value;
 
-                String lower = strValue.toLowerCase();
+                String str = ((String) value).toLowerCase();
 
-                if (levels.stream().anyMatch(level ->
-                        lower.contains(level.toLowerCase()))) {
+                boolean match = levels.stream()
+                        .anyMatch(level -> str.contains(level.toLowerCase()));
 
-                    return true;
-                }
+                if (match) return true;
             }
         }
 
         return false;
     }
 
-    private void writeResult(BufferedWriter writer,
-                             List<String> labels,
-                             Map<String, Object> properties) throws Exception {
+    private String formatNode(List<String> labels, Map<String, Object> properties) {
 
-        String result = String.format(
-                "Labels: %s | Properties: %s",
-                labels, properties
-        );
-
-        writer.write(result);
-        writer.newLine();
+        return "Labels: " + labels + " | Properties: " + properties;
     }
 }

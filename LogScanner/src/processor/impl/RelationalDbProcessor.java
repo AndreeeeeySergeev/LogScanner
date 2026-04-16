@@ -1,76 +1,61 @@
 package processor.impl;
 
+import model.LogEvent;
 import processor.LogProcessor;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class RelationalDbProcessor implements LogProcessor {
 
     @Override
-    public void process(String jdbcUrl,
-                        String fileOutput,
-                        List<String> levels) throws Exception {
+    public List<LogEvent> process(String jdbcUrl, List<String> levels) throws Exception {
 
-        //потом вынести
-        String username = "";
-        String password = "";
+        List<LogEvent> events = new ArrayList<>();
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
-             BufferedWriter writer = new BufferedWriter(
-                     new OutputStreamWriter(new FileOutputStream(fileOutput), StandardCharsets.UTF_8))) {
+        // потом вынесем в конфиг
+        String username = "user";
+        String password = "password";
+
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
 
             if (!hasRequiredPrivileges(conn)) {
-                throw new SQLException("Недостаточно прав для выполнения поиска");
+                throw new SQLException("Недостаточно прав");
             }
 
             DatabaseMetaData meta = conn.getMetaData();
 
             try (ResultSet tables = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+
                 while (tables.next()) {
 
                     String tableName = tables.getString("TABLE_NAME");
 
-                    System.out.println("Обработка таблицы: " + tableName);
-
-                    searchTableForLevels(conn, tableName, writer, levels);
+                    searchTable(conn, tableName, levels, events);
                 }
             }
 
-        } catch (SQLException e) {
-            throw new SQLException("Ошибка работы с БД: " + e.getMessage(), e);
+        }
+
+        return events;
+    }
+
+    private void searchTable(Connection conn,
+                             String tableName,
+                             List<String> levels,
+                             List<LogEvent> events) throws SQLException {
+
+        List<String> columns = findCandidateColumns(conn, tableName);
+
+        for (String column : columns) {
+            searchColumn(conn, tableName, column, levels, events);
         }
     }
 
-    private boolean hasRequiredPrivileges(Connection conn) {
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT 1")) {
-
-            return rs.next();
-
-        } catch (SQLException e) {
-            System.err.println("Недостаточно прав: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private void searchTableForLevels(Connection conn,
-                                      String tableName,
-                                      BufferedWriter writer,
-                                      List<String> levels) throws SQLException, IOException {
-
-        List<String> candidateColumns = findCandidateColumns(conn, tableName);
-
-        for (String column : candidateColumns) {
-            searchColumnForLevels(conn, tableName, column, writer, levels);
-        }
-    }
-
-    private List<String> findCandidateColumns(Connection conn,
-                                              String tableName) throws SQLException {
+    private List<String> findCandidateColumns(Connection conn, String tableName) throws SQLException {
 
         List<String> columns = new ArrayList<>();
         List<String> keywords = Arrays.asList("level", "log", "severity", "status", "type");
@@ -78,6 +63,7 @@ public class RelationalDbProcessor implements LogProcessor {
         try (ResultSet rs = conn.getMetaData().getColumns(null, null, tableName, null)) {
 
             while (rs.next()) {
+
                 String columnName = rs.getString("COLUMN_NAME").toLowerCase();
 
                 if (keywords.stream().anyMatch(columnName::contains)) {
@@ -89,12 +75,11 @@ public class RelationalDbProcessor implements LogProcessor {
         return columns;
     }
 
-    private void searchColumnForLevels(Connection conn,
-                                       String tableName,
-                                       String columnName,
-                                       BufferedWriter writer,
-                                       List<String> levels)
-            throws SQLException, IOException {
+    private void searchColumn(Connection conn,
+                              String tableName,
+                              String column,
+                              List<String> levels,
+                              List<LogEvent> events) throws SQLException {
 
         String dbProduct = conn.getMetaData().getDatabaseProductName().toLowerCase();
 
@@ -102,15 +87,16 @@ public class RelationalDbProcessor implements LogProcessor {
 
         if (dbProduct.contains("oracle")) {
             limitClause = " FETCH FIRST 1000 ROWS ONLY";
-        } else if (dbProduct.contains("microsoft") || dbProduct.contains("sql server")) {
+        } else if (dbProduct.contains("sql server")) {
             limitClause = " OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY";
         } else {
             limitClause = " LIMIT 1000";
         }
 
         String whereClause = levels.stream()
-                .map(level -> "LOWER(" + columnName + ") LIKE '%" + level.toLowerCase() + "%'")
-                .collect(Collectors.joining(" OR "));
+                .map(level -> "LOWER(" + column + ") LIKE '%" + level.toLowerCase() + "%'")
+                .reduce((a, b) -> a + " OR " + b)
+                .orElse("");
 
         String query = "SELECT * FROM " + tableName +
                 " WHERE " + whereClause +
@@ -119,34 +105,46 @@ public class RelationalDbProcessor implements LogProcessor {
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
 
-            ResultSetMetaData rsMeta = rs.getMetaData();
-            int columnCount = rsMeta.getColumnCount();
+            ResultSetMetaData meta = rs.getMetaData();
+            int columnCount = meta.getColumnCount();
 
             while (rs.next()) {
 
                 StringBuilder row = new StringBuilder();
 
-                row.append("Таблица: ").append(tableName)
-                        .append(", Колонка: ").append(columnName).append(" | ");
-
                 for (int i = 1; i <= columnCount; i++) {
+
                     String value = rs.getString(i);
 
                     if (value != null) {
-                        row.append(rsMeta.getColumnName(i))
+                        row.append(meta.getColumnName(i))
                                 .append(": ")
                                 .append(value)
                                 .append(" | ");
                     }
                 }
 
-                writer.write(row.toString().trim());
-                writer.newLine();
+                String message = row.toString();
+
+                events.add(new LogEvent(
+                        Instant.now(),
+                        "REL_DB",
+                        "UNKNOWN",
+                        message
+                ));
             }
+        }
+    }
+
+    private boolean hasRequiredPrivileges(Connection conn) {
+
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT 1")) {
+
+            return rs.next();
 
         } catch (SQLException e) {
-            System.err.println("Ошибка запроса к " + tableName +
-                    "." + columnName + ": " + e.getMessage());
+            return false;
         }
     }
 }

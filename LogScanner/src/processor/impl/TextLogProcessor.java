@@ -5,8 +5,8 @@ import processor.LogProcessor;
 import util.FileUtils;
 
 import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,24 +28,18 @@ public class TextLogProcessor implements LogProcessor {
 
             while ((line = reader.readLine()) != null) {
 
-                line = line.trim();
-
-                if (line.isEmpty() || line.startsWith("//")) {
-                    continue;
-                }
-
-                String lowerLine = line.toLowerCase();
+                String lower = line.toLowerCase();
 
                 boolean match = levels.stream()
-                        .anyMatch(level -> lowerLine.contains(level.toLowerCase()));
+                        .anyMatch(level -> lower.contains(level.toLowerCase()));
 
                 if (match) {
 
                     LogEvent event = new LogEvent(
-                            Instant.now(),          // пока так (потом парсим из лога)
-                            "TEXT_FILE",            // источник (потом улучшим)
-                            "UNKNOWN",              // уровень (потом выделим отдельно)
-                            line                    // оригинальное сообщение
+                            Instant.now(),     // потом заменить
+                            "TEXT_FILE",
+                            "UNKNOWN",
+                            line
                     );
 
                     events.add(event);

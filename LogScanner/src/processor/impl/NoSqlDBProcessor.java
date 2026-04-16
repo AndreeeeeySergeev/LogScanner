@@ -1,90 +1,77 @@
 package processor.impl;
 
+import com.mongodb.client.*;
+import model.LogEvent;
+import org.bson.Document;
 import processor.LogProcessor;
 
-import com.mongodb.client.*;
-import org.bson.Document;
-
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class NoSqlDBProcessor implements LogProcessor {
 
     @Override
-    public void process(String connectionString,
-                        String fileOutput,
-                        List<String> levels) throws Exception {
+    public List<LogEvent> process(String connectionString, List<String> levels) throws Exception {
 
-        //нормализуем уровни один раз
-        List<String> normalizedLevels = levels.stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toList());
+        List<LogEvent> events = new ArrayList<>();
 
-        try (MongoClient mongoClient = MongoClients.create(connectionString);
-             BufferedWriter writer = new BufferedWriter(
-                     new OutputStreamWriter(new FileOutputStream(fileOutput), StandardCharsets.UTF_8))) {
+        try (MongoClient mongoClient = MongoClients.create(connectionString)) {
 
             MongoIterable<String> databaseNames = mongoClient.listDatabaseNames();
 
             for (String dbName : databaseNames) {
 
-                System.out.println("Обработка базы: " + dbName);
-
                 MongoDatabase database = mongoClient.getDatabase(dbName);
 
-                for (String collectionName : database.listCollectionNames()) {
+                List<String> collections =
+                        database.listCollectionNames().into(new ArrayList<>());
 
-                    System.out.println("  Коллекция: " + collectionName);
+                for (String collectionName : collections) {
 
-                    searchCollectionForLevels(database,
-                            collectionName,
-                            writer,
-                            normalizedLevels);
+                    searchCollection(database, collectionName, levels, events);
                 }
             }
 
-        } catch (Exception e) {
-            throw new Exception("Ошибка при работе с MongoDB: " + e.getMessage(), e);
         }
+
+        return events;
     }
 
-    private void searchCollectionForLevels(MongoDatabase database,
-                                           String collectionName,
-                                           BufferedWriter writer,
-                                           List<String> levels) throws IOException {
+    private void searchCollection(MongoDatabase database,
+                                  String collectionName,
+                                  List<String> levels,
+                                  List<LogEvent> events) {
 
-        MongoCollection<Document> collection = database.getCollection(collectionName);
+        MongoCollection<Document> collection =
+                database.getCollection(collectionName);
 
-        try (MongoCursor<Document> cursor = collection.find().limit(1000).iterator()) {
-
-            int foundCount = 0;
+        try (MongoCursor<Document> cursor =
+                     collection.find().limit(1000).iterator()) {
 
             while (cursor.hasNext()) {
 
                 Document doc = cursor.next();
 
-                String jsonLower = doc.toJson().toLowerCase();
+                String json = doc.toJson();
+                String lower = json.toLowerCase();
 
                 boolean match = levels.stream()
-                        .anyMatch(jsonLower::contains);
+                        .anyMatch(level -> lower.contains(level.toLowerCase()));
 
                 if (match) {
-                    writer.write("Коллекция: " + collectionName + " | " + doc.toJson());
-                    writer.newLine();
-                    foundCount++;
+
+                    events.add(new LogEvent(
+                            Instant.now(),
+                            "MONGO",
+                            "UNKNOWN",
+                            json
+                    ));
                 }
             }
 
-            if (foundCount > 0) {
-                System.out.println("В коллекции '" + collectionName +
-                        "' найдено " + foundCount + " документов");
-            }
-
         } catch (Exception e) {
-            System.err.println("Ошибка при поиске в коллекции "
-                    + collectionName + ": " + e.getMessage());
+            System.err.println("Ошибка в коллекции " + collectionName + ": " + e.getMessage());
         }
     }
 }

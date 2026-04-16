@@ -1,96 +1,91 @@
 package processor.impl;
 
+import model.LogEvent;
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 import processor.LogProcessor;
-import util.FileUtils;
 
-import javax.xml.stream.*;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+import java.io.File;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-
-import static util.EncodingDetector.detectEncoding;
 
 public class XmlLogProcessor implements LogProcessor {
 
     @Override
-    public void process(String filePath,
-                        String fileOutput,
-                        List<String> levels) throws Exception {
+    public List<LogEvent> process(String filePath, List<String> levels) throws Exception {
 
-        // 1. Нормализуем уровни один раз
-        List<String> normalizedLevels = levels.stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toList());
+        List<LogEvent> events = new ArrayList<>();
 
-        // 2. Определяем кодировку
-        String encoding = FileUtils.detectEncoding(filePath);
+        SAXParserFactory factory = SAXParserFactory.newInstance();
 
-        // 3. Настраиваем безопасный XML
-        XMLInputFactory factory = XMLInputFactory.newInstance();
-        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        // безопасность
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
 
-        try (InputStream is = new FileInputStream(filePath);
-             BufferedWriter writer = new BufferedWriter(
-                     new OutputStreamWriter(
-                             new FileOutputStream(fileOutput),
-                             StandardCharsets.UTF_8))) {
+        SAXParser saxParser = factory.newSAXParser();
 
-            XMLStreamReader reader = factory.createXMLStreamReader(is, encoding);
+        DefaultHandler handler = new DefaultHandler() {
 
-            StringBuilder textBuffer = new StringBuilder();
+            private StringBuilder currentText = new StringBuilder();
 
-            while (reader.hasNext()) {
-                int event = reader.next();
+            @Override
+            public void startElement(String uri, String localName,
+                                     String qName, Attributes attributes) {
 
-                switch (event) {
+                // очищаем буфер
+                currentText.setLength(0);
 
-                    case XMLStreamConstants.START_ELEMENT:
-                        // очищаем буфер при новом элементе
-                        textBuffer.setLength(0);
+                // обрабатываем атрибуты
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    String value = attributes.getValue(i);
 
-                        // 1. Проверяем атрибуты
-                        for (int i = 0; i < reader.getAttributeCount(); i++) {
-                            String value = reader.getAttributeValue(i);
-
-                            if (value != null) {
-                                processAndWrite(value, normalizedLevels, writer);
-                            }
-                        }
-                        break;
-
-                    case XMLStreamConstants.CHARACTERS:
-                        // 2. Накопление текста (ВАЖНО!)
-                        textBuffer.append(reader.getText());
-                        break;
-
-                    case XMLStreamConstants.END_ELEMENT:
-                        // 3. Обрабатываем накопленный текст
-                        String text = textBuffer.toString().trim();
-
-                        if (!text.isEmpty()) {
-                            processAndWrite(text, normalizedLevels, writer);
-                        }
-
-                        textBuffer.setLength(0);
-                        break;
+                    if (containsLevel(value, levels)) {
+                        events.add(new LogEvent(
+                                Instant.now(),
+                                "XML",
+                                "UNKNOWN",
+                                value
+                        ));
+                    }
                 }
             }
 
-            reader.close();
-        }
+            @Override
+            public void characters(char[] ch, int start, int length) {
+                currentText.append(ch, start, length);
+            }
+
+            @Override
+            public void endElement(String uri, String localName, String qName) {
+
+                String text = currentText.toString().trim();
+
+                if (!text.isEmpty() && containsLevel(text, levels)) {
+                    events.add(new LogEvent(
+                            Instant.now(),
+                            "XML",
+                            "UNKNOWN",
+                            text
+                    ));
+                }
+            }
+        };
+
+        saxParser.parse(new File(filePath), handler);
+
+        return events;
     }
 
-    private void processAndWrite(String text,
-                                 List<String> levels,
-                                 BufferedWriter writer) throws IOException {
+    private boolean containsLevel(String text, List<String> levels) {
 
         String lower = text.toLowerCase();
 
-        if (levels.stream().anyMatch(lower::contains)) {
-            writer.write(text);
-            writer.newLine();
-        }
+        return levels.stream()
+                .anyMatch(level -> lower.contains(level.toLowerCase()));
     }
 }
