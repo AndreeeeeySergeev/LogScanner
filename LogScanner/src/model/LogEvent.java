@@ -1,6 +1,7 @@
 package model;
 
 import java.time.Instant;
+
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -9,24 +10,25 @@ public class LogEvent {
     private String message;        // само сообщение
     private String level;          // уровень (error, warn и т.д.)
     private String source;         // источник (файл, система)
-    private LocalDateTime timestamp; // время события
+    private Instant timestamp; // время события
 
     private Map<String, Object> metadata; // дополнительные данные
 
     public LogEvent(String message,
                     String level,
                     String source,
-                    LocalDateTime timestamp,
+                    Instant timestamp,
                     Map<String, Object> metadata) {
 
-        this.message = message;
-        this.level = level;
-        this.source = source;
         this.timestamp = timestamp;
+        this.source = source;
+        this.level = level;
+        this.message = message;
         this.metadata = metadata;
     }
 
-    public LogEvent(Instant timestamp, String source, String normalizedLevel, String message) {
+    public LogEvent(Instant timestamp, String source, String level, String message) {
+        this(message, level, source, timestamp, null);
     }
 
 
@@ -54,11 +56,11 @@ public class LogEvent {
         this.source = source;
     }
 
-    public LocalDateTime getTimestamp() {
+    public Instant getTimestamp() {
         return timestamp;
     }
 
-    public void setTimestamp(LocalDateTime timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
     }
 

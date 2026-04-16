@@ -5,6 +5,7 @@ import writer.LogWriter;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 
 public class FileLogWriter implements LogWriter {
@@ -26,9 +27,15 @@ public class FileLogWriter implements LogWriter {
 
     private String format(LogEvent event) {
 
+        Instant timestamp = event.getTimestamp();
+
+        if (timestamp == null) {
+            timestamp = Instant.now();
+        }
+
         return String.format(
                 "[%s] [%s] [%s] %s",
-                DateTimeFormatter.ISO_INSTANT.format(event.getTimestamp()),
+                DateTimeFormatter.ISO_INSTANT.format(timestamp),
                 event.getSource(),
                 event.getLevel(),
                 event.getMessage()

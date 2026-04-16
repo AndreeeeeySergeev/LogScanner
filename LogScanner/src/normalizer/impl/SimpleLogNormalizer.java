@@ -11,7 +11,7 @@ import java.util.List;
 public class SimpleLogNormalizer implements LogNormalizer {
 
     private final List<String> levels;
-    private final TimestampExtractor timestampExtractor = new TimestampExtractor();
+    private final TimestampExtractor extractor = new TimestampExtractor();
 
     public SimpleLogNormalizer(List<String> levels) {
         this.levels = levels;
@@ -22,22 +22,20 @@ public class SimpleLogNormalizer implements LogNormalizer {
 
         String message = event.getMessage();
 
-        // 1. Нормализация уровня
-        String normalizedLevel = extractLevel(message);
 
-        // 2. Парсинг timestamp
-        TimestampParseResult tsResult = timestampExtractor.extract(message);
-        Instant timestamp = tsResult.getTimestamp();
-
-        // 🔥 (опционально, но очень полезно)
-        if (!tsResult.isParsed()) {
-            System.out.println("⚠ Timestamp не найден, используем fallback: " + message);
+        if (message == null) {
+            message = "";
         }
 
-        // 3. Определение источника
+        // 1. Уровень
+        String normalizedLevel = extractLevel(message);
+
+        // 2. Timestamp
+        Instant timestamp = extractTimestamp(message);
+
+        // 3. Источник
         String source = detectSource(message);
 
-        // 4. Создание нормализованного события
         return new LogEvent(
                 timestamp,
                 source,
@@ -47,6 +45,11 @@ public class SimpleLogNormalizer implements LogNormalizer {
     }
 
     private String extractLevel(String message) {
+
+
+        if (message.isEmpty()) {
+            return "UNKNOWN";
+        }
 
         String lower = message.toLowerCase();
 
@@ -59,14 +62,28 @@ public class SimpleLogNormalizer implements LogNormalizer {
         return "UNKNOWN";
     }
 
+    private Instant extractTimestamp(String message) {
+
+        TimestampParseResult result = extractor.extract(message);
+
+        if (result.getTimestamp() == null) {
+            return Instant.now(); // fallback
+        }
+
+        return result.getTimestamp();
+    }
+
     private String detectSource(String message) {
+
+        if (message.isEmpty()) {
+            return "UNKNOWN";
+        }
 
         String lower = message.toLowerCase();
 
         if (lower.contains("nginx")) return "NGINX";
         if (lower.contains("firewall")) return "FIREWALL";
-        if (lower.contains("postgres")) return "POSTGRES";
-        if (lower.contains("mysql")) return "MYSQL";
+        if (lower.contains("db") || lower.contains("database")) return "DATABASE";
 
         return "UNKNOWN";
     }

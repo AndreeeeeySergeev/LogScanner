@@ -27,6 +27,9 @@ public class TextLogProcessor implements LogProcessor {
             String line;
 
             while ((line = reader.readLine()) != null) {
+                if (line == null || line.trim().isEmpty()) {
+                    continue;
+                }
 
                 String lower = line.toLowerCase();
 

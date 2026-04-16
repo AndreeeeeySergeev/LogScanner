@@ -1,0 +1,7 @@
+{
+  "events": [
+    {"level": "INFO", "msg": "ok"},
+    {"level": "ERROR", "msg": "fail"},
+    {"level": "CRITICAL", "msg": "boom"}
+  ]
+}

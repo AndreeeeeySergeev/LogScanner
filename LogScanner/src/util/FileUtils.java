@@ -4,9 +4,14 @@ import org.mozilla.universalchardet.UniversalDetector;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class FileUtils {
 
@@ -53,5 +58,16 @@ public class FileUtils {
         detector.reset();
 
         return encoding != null ? encoding : "UTF-8";
+    }
+
+    public static List<String> listFiles(String directoryPath) {
+        try (Stream<Path> paths = Files.walk(Paths.get(directoryPath))) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .map(Path::toString)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException("Ошибка чтения директории", e);
+        }
     }
 }

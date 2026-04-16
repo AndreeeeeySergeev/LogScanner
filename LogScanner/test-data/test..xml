@@ -1,0 +1,5 @@
+<logs>
+    <log level="INFO">Start</log>
+    <log level="ERROR">Failure detected</log>
+    <log level="CRITICAL">System down</log>
+</logs>
