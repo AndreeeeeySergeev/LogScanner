@@ -6,28 +6,36 @@ import writer.LogWriter;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 public class FileLogWriter implements LogWriter {
 
+    private final BufferedWriter writer;
+
+    public FileLogWriter(String outputPath) throws Exception {
+        this.writer = new BufferedWriter(new FileWriter(outputPath, true));
+    }
+
     @Override
-    public void write(List<LogEvent> events, String outputPath) throws Exception {
+    public void write(LogEvent event) throws Exception {
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
+        String formatted = format(event);
 
-            for (LogEvent event : events) {
+        writer.write(formatted);
+        writer.newLine();
+    }
 
-                String line = String.format(
-                        "[%s] [%s] [%s] %s",
-                        event.getTimestamp(),
-                        event.getSource(),
-                        event.getLevel(),
-                        event.getMessage()
-                );
+    private String format(LogEvent event) {
 
-                writer.write(line);
-                writer.newLine();
-            }
-        }
+        return String.format(
+                "[%s] [%s] [%s] %s",
+                DateTimeFormatter.ISO_INSTANT.format(event.getTimestamp()),
+                event.getSource(),
+                event.getLevel(),
+                event.getMessage()
+        );
+    }
+
+    public void close() throws Exception {
+        writer.close();
     }
 }

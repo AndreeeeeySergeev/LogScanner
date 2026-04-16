@@ -3,50 +3,59 @@ package service;
 import alert.AlertService;
 import alert.impl.SimpleAlertService;
 import model.LogEvent;
+import normalizer.LogNormalizer;
+import normalizer.impl.SimpleLogNormalizer;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
 import util.FileUtils;
-import writer.LogWriter;
 import writer.impl.FileLogWriter;
-import normalizer.LogNormalizer;
-import normalizer.impl.SimpleLogNormalizer;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class LogScannerService {
 
-    private final LogWriter writer;
-    private final AlertService alertService = new SimpleAlertService();
-
-    // 👉 можно потом подменять (например, на DB writer)
-    public LogScannerService() {
-        this.writer = new FileLogWriter();
-    }
-    public LogScannerService(LogWriter writer) {
-        this.writer = writer;
-    }
-
-    public void process(String filePath,
-                        String outputPath,
+    public void process(String input,
+                        String output,
                         List<String> levels) throws Exception {
 
-        String format = FileUtils.detectFormat(filePath);
+        // 1. Определяем формат
+        String format = FileUtils.detectFormat(input);
 
+        // 2. Получаем processor
         LogProcessor processor =
                 LogProcessorFactory.getProcessor(format);
 
+        // 3. Читаем события
         List<LogEvent> events =
-                processor.process(filePath, outputPath, levels);
+                processor.process(input, levels);
 
-        LogNormalizer normalizer = new SimpleLogNormalizer(levels);
+        // 4. Нормализация
+        LogNormalizer normalizer =
+                new SimpleLogNormalizer(levels);
 
-        for (LogEvent event : events) {
+        // 5. Alert service
+        AlertService alertService =
+                new SimpleAlertService();
 
-            LogEvent normalized = normalizer.normalize(event);
+        // 6. Writer
+        FileLogWriter writer =
+                new FileLogWriter(output);
+
+        try {
+            for (LogEvent event : events) {
 
 
-            alertService.process(normalized);
+                LogEvent normalized =
+                        normalizer.normalize(event);
+
+
+                alertService.process(normalized);
+
+                writer.write(normalized);
+            }
+
+        } finally {
+            writer.close();
         }
     }
 }
