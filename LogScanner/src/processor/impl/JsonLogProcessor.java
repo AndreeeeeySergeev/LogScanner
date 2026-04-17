@@ -142,7 +142,7 @@ public class JsonLogProcessor implements LogProcessor {
 
         if (raw != null) {
 
-            // 👇 используем уже существующий extractor
+            // используем уже существующий extractor
             TimestampParseResult result = extractor.extract(raw);
 
             if (result.isParsed()) {
