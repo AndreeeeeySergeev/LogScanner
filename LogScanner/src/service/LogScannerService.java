@@ -14,7 +14,7 @@ import java.util.List;
 
 public class LogScannerService {
 
-    // 🔹 Старый метод — НЕ ТРОГАЕМ (важно)
+
     public void process(String input,
                         String output,
                         List<String> levels) throws Exception {
@@ -52,24 +52,21 @@ public class LogScannerService {
         }
     }
 
-    // НОВЫЙ МЕТОД — обработка директории
+
     public void processDirectory(String inputDir,
                                  String output,
                                  List<String> levels) throws Exception {
 
         List<String> files = FileUtils.listFiles(inputDir);
 
-        LogNormalizer normalizer =
-                new SimpleLogNormalizer(levels);
-
-        AlertService alertService =
-                new SimpleAlertService();
-
-        FileLogWriter writer =
-                new FileLogWriter(output);
+        LogNormalizer normalizer = new SimpleLogNormalizer(levels);
+        AlertService alertService = new SimpleAlertService();
+        FileLogWriter writer = new FileLogWriter(output);
 
         try {
             for (String filePath : files) {
+
+                System.out.println("📄 Обработка файла: " + filePath);
 
                 String format = FileUtils.detectFormat(filePath);
 

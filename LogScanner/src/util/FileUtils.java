@@ -4,16 +4,23 @@ import org.mozilla.universalchardet.UniversalDetector;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 public class FileUtils {
+
+
+    public static final List<String> SUPPORTED_FORMATS = List.of(
+            "log", "txt", "json", "xml", "csv"
+    );
 
     public static boolean exists(String filePath) {
         return Files.exists(Path.of(filePath));
@@ -29,10 +36,39 @@ public class FileUtils {
         int dotIndex = fileName.lastIndexOf(".");
 
         if (dotIndex == -1) {
-            throw new IllegalArgumentException("Формат файла не определён: " + fileName);
+            return ""; // нет расширения
         }
 
         return fileName.substring(dotIndex + 1).toLowerCase();
+    }
+
+    public static boolean isSupportedFormat(String format) {
+        return SUPPORTED_FORMATS.contains(format);
+    }
+
+
+    public static List<String> listFiles(String directoryPath) {
+
+        try (Stream<Path> paths = Files.walk(Paths.get(directoryPath))) {
+
+            return paths
+                    .filter(Files::isRegularFile)
+
+                    // фильтр по расширению
+                    .filter(path -> {
+                        String format = detectFormat(path.toString());
+                        return isSupportedFormat(format);
+                    })
+
+                    // фильтр читаемости
+                    .filter(Files::isReadable)
+
+                    .map(Path::toString)
+                    .collect(Collectors.toList());
+
+        } catch (IOException e) {
+            throw new RuntimeException("Ошибка чтения директории: " + directoryPath, e);
+        }
     }
 
     public static String detectEncoding(String filePath) {
@@ -51,23 +87,12 @@ public class FileUtils {
 
         } catch (Exception e) {
             System.err.println("Ошибка определения кодировки: " + e.getMessage());
-            return "UTF-8"; // fallback
+            return "UTF-8";
         }
 
         String encoding = detector.getDetectedCharset();
         detector.reset();
 
         return encoding != null ? encoding : "UTF-8";
-    }
-
-    public static List<String> listFiles(String directoryPath) {
-        try (Stream<Path> paths = Files.walk(Paths.get(directoryPath))) {
-            return paths
-                    .filter(Files::isRegularFile)
-                    .map(Path::toString)
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new RuntimeException("Ошибка чтения директории", e);
-        }
     }
 }
