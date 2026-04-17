@@ -3,73 +3,154 @@ package processor.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import model.LogEvent;
+import normalizer.timestamp.TimestampExtractor;
+import normalizer.timestamp.TimestampParseResult;
 import processor.LogProcessor;
-import util.FileUtils;
 
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.Charset;
+import java.io.File;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 public class JsonLogProcessor implements LogProcessor {
 
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final TimestampExtractor extractor = new TimestampExtractor();
+
     @Override
     public List<LogEvent> process(String filePath, List<String> levels) throws Exception {
 
         List<LogEvent> events = new ArrayList<>();
 
-        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(new File(filePath));
 
-        String encoding = FileUtils.detectEncoding(filePath);
-
-        JsonNode root;
-
-        try (InputStreamReader reader = new InputStreamReader(
-                new FileInputStream(filePath), Charset.forName(encoding))) {
-
-            root = mapper.readTree(reader);
-        }
-
-        //рекурсивный обход
-        processJsonNode(root, levels, events);
+        extractEvents(root, events, levels);
 
         return events;
     }
 
-    private void processJsonNode(JsonNode node,
-                                 List<String> levels,
-                                 List<LogEvent> events) {
 
-        String nodeText = node.toString().toLowerCase();
+    private void extractEvents(JsonNode node,
+                               List<LogEvent> events,
+                               List<String> levels) {
 
-        boolean match = levels.stream()
-                .anyMatch(level -> nodeText.contains(level.toLowerCase()));
-
-        if (match) {
-            LogEvent event = new LogEvent(
-                    Instant.now(),   // потом заменить через normalizer
-                    "JSON",
-                    "UNKNOWN",
-                    node.toString()
-            );
-
-            events.add(event);
-        }
-
-        // объект
         if (node.isObject()) {
-            node.fields().forEachRemaining(entry ->
-                    processJsonNode(entry.getValue(), levels, events)
-            );
-        }
 
-        // массив
-        if (node.isArray()) {
+            String level = extractLevel(node);
+            String message = extractMessage(node);
+
+            if (level != null && isLevelAllowed(level, levels)) {
+
+
+                Instant timestamp = extractTimestamp(node);
+
+                events.add(new LogEvent(
+                        timestamp,
+                        detectSource(node),
+                        level,
+                        message != null ? message : node.toString()
+                ));
+            }
+
+            node.elements().forEachRemaining(child ->
+                    extractEvents(child, events, levels)
+            );
+
+        } else if (node.isArray()) {
+
             for (JsonNode item : node) {
-                processJsonNode(item, levels, events);
+                extractEvents(item, events, levels);
             }
         }
+    }
+
+
+    private String extractLevel(JsonNode node) {
+
+        if (node.has("level")) {
+            return node.get("level").asText().toUpperCase();
+        }
+
+        if (node.has("severity")) {
+            return node.get("severity").asText().toUpperCase();
+        }
+
+        if (node.has("status")) {
+            return node.get("status").asText().toUpperCase();
+        }
+
+        return null;
+    }
+
+
+    private String extractMessage(JsonNode node) {
+
+        if (node.has("message")) {
+            return node.get("message").asText();
+        }
+
+        if (node.has("msg")) {
+            return node.get("msg").asText();
+        }
+
+        if (node.has("log")) {
+            return node.get("log").asText();
+        }
+
+        return null;
+    }
+
+
+    private String detectSource(JsonNode node) {
+
+        if (node.has("system")) {
+            return node.get("system").asText().toUpperCase();
+        }
+
+        if (node.has("service")) {
+            return node.get("service").asText().toUpperCase();
+        }
+
+        if (node.has("app")) {
+            return node.get("app").asText().toUpperCase();
+        }
+
+        if (node.has("source")) {
+            return node.get("source").asText().toUpperCase();
+        }
+
+        return "UNKNOWN";
+    }
+
+
+    private boolean isLevelAllowed(String level, List<String> levels) {
+
+        return levels.stream()
+                .anyMatch(l -> l.equalsIgnoreCase(level));
+    }
+
+    private Instant extractTimestamp(JsonNode node) {
+
+        // пробуем найти timestamp поле
+        String raw = null;
+
+        if (node.has("timestamp")) raw = node.get("timestamp").asText();
+        else if (node.has("@timestamp")) raw = node.get("@timestamp").asText();
+        else if (node.has("time")) raw = node.get("time").asText();
+        else if (node.has("date")) raw = node.get("date").asText();
+        else if (node.has("ts")) raw = node.get("ts").asText();
+
+        if (raw != null) {
+
+            // 👇 используем уже существующий extractor
+            TimestampParseResult result = extractor.extract(raw);
+
+            if (result.isParsed()) {
+                return result.getTimestamp();
+            }
+        }
+
+        // fallback
+        return Instant.now();
     }
 }
