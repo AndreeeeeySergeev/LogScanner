@@ -6,16 +6,26 @@ public class LevelExtractor {
 
     public static String extract(String message, List<String> levels) {
 
-        if (message == null) return null;
-
-        String lower = message.toLowerCase();
+        String lowerMessage = message.toLowerCase();
 
         for (String level : levels) {
-            if (lower.contains(level.toLowerCase())) {
+
+            String lowerLevel = level.toLowerCase();
+
+            // более точное совпадение
+            if (containsWord(lowerMessage, lowerLevel)) {
                 return level.toUpperCase();
             }
         }
 
         return null;
+    }
+
+    private static boolean containsWord(String text, String word) {
+
+        return text.equals(word)
+                || text.startsWith(word + " ")
+                || text.endsWith(" " + word)
+                || text.contains(" " + word + " ");
     }
 }

@@ -9,11 +9,19 @@ import java.util.regex.Pattern;
 
 public class IsoTimestampParser implements TimestampParser {
 
-    private static final Pattern PATTERN =
-            Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
+    // ISO с:
+    // ✔ миллисекундами (опционально)
+    // ✔ Z или timezone offset
+    private static final Pattern PATTERN = Pattern.compile(
+            "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})"
+    );
 
     @Override
     public TimestampParseResult parse(String message) {
+
+        if (message == null || message.isBlank()) {
+            return new TimestampParseResult(null, false);
+        }
 
         Matcher matcher = PATTERN.matcher(message);
 
@@ -21,7 +29,9 @@ public class IsoTimestampParser implements TimestampParser {
             try {
                 Instant ts = Instant.parse(matcher.group());
                 return new TimestampParseResult(ts, true);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                System.err.println("Проблема с парсером ISO " + e.getMessage());
+            }
         }
 
         return new TimestampParseResult(null, false);

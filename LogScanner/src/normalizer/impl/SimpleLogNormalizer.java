@@ -24,23 +24,32 @@ public class SimpleLogNormalizer implements LogNormalizer {
 
         String message = event.getMessage();
 
-        if (message == null || message.isEmpty()) {
+        if (message == null || message.isBlank()) {
             return null;
         }
 
-        // LEVEL
-        String level = LevelExtractor.extract(message, levels);
+        // LEVEL (не перетираем, если уже есть)
+        String level = event.getLevel();
+        if (level == null) {
+            level = LevelExtractor.extract(message, levels);
+        }
 
         // ФИЛЬТРАЦИЯ
         if (level == null) {
             return null;
         }
 
-        // TIMESTAMP
-        Instant timestamp = extractTimestamp(message);
+        // TIMESTAMP (не перетираем)
+        Instant timestamp = event.getTimestamp();
+        if (timestamp == null) {
+            timestamp = extractTimestamp(message);
+        }
 
-        // SOURCE
-        String source = SourceDetector.detect(message);
+        // SOURCE (не перетираем)
+        String source = event.getSource();
+        if (source == null) {
+            source = SourceDetector.detect(message);
+        }
 
         return new LogEvent(timestamp, source, level, message);
     }
@@ -53,6 +62,6 @@ public class SimpleLogNormalizer implements LogNormalizer {
             return result.getTimestamp();
         }
 
-        return Instant.now(); // fallback
+        return Instant.now();
     }
 }

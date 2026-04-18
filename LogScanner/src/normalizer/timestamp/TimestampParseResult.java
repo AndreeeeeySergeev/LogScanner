@@ -19,4 +19,5 @@ public class TimestampParseResult {
     public boolean isParsed() {
         return parsed;
     }
+
 }

@@ -15,7 +15,12 @@ public class TimestampExtractor {
 
     public TimestampParseResult extract(String message) {
 
+        if (message == null || message.isBlank()) {
+            return new TimestampParseResult(null, false);
+        }
+
         for (TimestampParser parser : parsers) {
+
             TimestampParseResult result = parser.parse(message);
 
             if (result.isParsed()) {
@@ -23,7 +28,7 @@ public class TimestampExtractor {
             }
         }
 
-        // fallback
-        return new TimestampParseResult(Instant.now(), false);
+        //fallback
+        return new TimestampParseResult(null, false);
     }
 }
