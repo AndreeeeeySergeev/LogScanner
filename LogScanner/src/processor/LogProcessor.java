@@ -1,9 +1,12 @@
 package processor;
 
 import model.LogEvent;
-import java.util.List;
+
+import java.util.function.Consumer;
 
 public interface LogProcessor {
 
-    List<LogEvent> process(String input) throws Exception;
+    void process(String filePath,
+                 String encoding,
+                 Consumer<LogEvent> consumer) throws Exception;
 }

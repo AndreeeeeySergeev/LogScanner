@@ -7,8 +7,8 @@ import normalizer.LogNormalizer;
 import normalizer.impl.SimpleLogNormalizer;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
+import util.EncodingDetector;
 import util.FileScanner;
-import util.FileUtils;
 import writer.impl.FileLogWriter;
 
 import java.util.List;
@@ -30,37 +30,35 @@ public class LogScannerService {
 
                 System.out.println("📄 Обработка файла: " + filePath);
 
-                processSingleFile(filePath, normalizer, alertService, writer);
+                String encoding = EncodingDetector.detectEncoding(filePath);
+
+                String format = util.FileUtils.detectFormat(filePath);
+
+                LogProcessor processor =
+                        LogProcessorFactory.getProcessor(format);
+
+                processor.process(filePath, encoding, event -> {
+
+                    try {
+                        LogEvent normalized = normalizer.normalize(event);
+
+                        if (normalized == null) return;
+
+                        alertService.process(normalized);
+                        writer.write(normalized);
+
+                    } catch (Exception e) {
+
+                        System.err.println("❌ Ошибка обработки события:");
+                        System.err.println("Файл: " + filePath);
+                        System.err.println("Сообщение: " + event.getMessage());
+                        e.printStackTrace();
+                    }
+                });
             }
 
         } finally {
             writer.close();
-        }
-    }
-
-    private void processSingleFile(String filePath,
-                                   LogNormalizer normalizer,
-                                   AlertService alertService,
-                                   FileLogWriter writer) throws Exception {
-
-        String format = FileUtils.detectFormat(filePath);
-
-        LogProcessor processor =
-                LogProcessorFactory.getProcessor(format);
-
-        List<LogEvent> events =
-                processor.process(filePath);
-
-        for (LogEvent event : events) {
-
-            LogEvent normalized = normalizer.normalize(event);
-
-            if (normalized == null) {
-                continue;
-            }
-
-            alertService.process(normalized);
-            writer.write(normalized);
         }
     }
 }
