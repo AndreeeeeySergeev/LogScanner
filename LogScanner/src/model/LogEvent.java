@@ -1,74 +1,61 @@
 package model;
 
 import java.time.Instant;
-
-import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Map;
 
 public class LogEvent {
 
-    private String message;        // само сообщение
-    private String level;          // уровень (error, warn и т.д.)
-    private String source;         // источник (файл, система)
-    private Instant timestamp; // время события
+    private final String message;
+    private final String level;
+    private final String source;
+    private final Instant timestamp;
+    private final Map<String, Object> metadata;
 
-    private Map<String, Object> metadata; // дополнительные данные
-
-    public LogEvent(String message,
-                    String level,
+    public LogEvent(Instant timestamp,
                     String source,
-                    Instant timestamp,
+                    String level,
+                    String message,
                     Map<String, Object> metadata) {
 
         this.timestamp = timestamp;
         this.source = source;
         this.level = level;
         this.message = message;
-        this.metadata = metadata;
+        this.metadata = metadata != null ? metadata : Collections.emptyMap();
     }
 
-    public LogEvent(Instant timestamp, String source, String level, String message) {
-        this(message, level, source, timestamp, null);
+    // удобный конструктор без metadata
+    public LogEvent(Instant timestamp,
+                    String source,
+                    String level,
+                    String message) {
+
+        this(timestamp, source, level, message, null);
     }
 
+    // ещё более простой (для processor'ов)
+    public LogEvent(String message) {
+        this(null, null, null, message, null);
+    }
 
     public String getMessage() {
         return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
     }
 
     public String getLevel() {
         return level;
     }
 
-    public void setLevel(String level) {
-        this.level = level;
-    }
-
     public String getSource() {
         return source;
-    }
-
-    public void setSource(String source) {
-        this.source = source;
     }
 
     public Instant getTimestamp() {
         return timestamp;
     }
 
-    public void setTimestamp(Instant timestamp) {
-        this.timestamp = timestamp;
-    }
-
     public Map<String, Object> getMetadata() {
         return metadata;
-    }
-
-    public void setMetadata(Map<String, Object> metadata) {
-        this.metadata = metadata;
     }
 }

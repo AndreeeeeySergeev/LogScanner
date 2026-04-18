@@ -4,16 +4,26 @@ import service.LogScannerService;
 
 public class Main {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
 
-        AppConfig config = ConfigLoader.load("config.properties");
+        try {
+            // 1. Загружаем конфиг
+            AppConfig config = ConfigLoader.load("config/properties");
 
-        LogScannerService service = new LogScannerService();
+            // 2. Запускаем сервис
+            LogScannerService service = new LogScannerService();
 
-        service.process(
-                config.getInputDir(),
-                config.getOutputFile(),
-                config.getLevels()
-        );
+            service.processDirectory(
+                    config.getInputDir(),
+                    config.getOutputFile(),
+                    config.getLevels()
+            );
+
+            System.out.println("Обработка завершена");
+
+        } catch (Exception e) {
+            System.err.println("Критическая ошибка:");
+            e.printStackTrace();
+        }
     }
 }

@@ -1,0 +1,3 @@
+levels=ERROR,CRITICAL,WARN
+inputDir=input
+outputFile=output/result.log
