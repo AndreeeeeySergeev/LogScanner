@@ -5,5 +5,5 @@ import java.util.List;
 
 public interface LogProcessor {
 
-    List<LogEvent> process(String input, List<String> levels) throws Exception;
+    List<LogEvent> process(String input) throws Exception;
 }
