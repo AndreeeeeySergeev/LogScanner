@@ -10,6 +10,7 @@ public class AppConfig {
     private String dbPassword;
     private List<DbSource> dbSources = List.of();
     private List<MongoSource> mongoSources = List.of();
+    private List<GraphSource> graphSources = List.of();
 
     // файлы
     private String inputDir;
@@ -80,4 +81,7 @@ public class AppConfig {
 
     public List<MongoSource> getMongoSources() { return mongoSources; }
     public void setMongoSources(List<MongoSource> mongoSources) { this.mongoSources = mongoSources; }
+
+    public List<GraphSource> getGraphSources() { return graphSources; }
+    public void setGraphSources(List<GraphSource> graphSources) { this.graphSources = graphSources; }
 }

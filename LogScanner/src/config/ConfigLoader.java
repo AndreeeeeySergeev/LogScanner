@@ -41,6 +41,7 @@ public class ConfigLoader {
             config.setMongoSources(mongoSources);
         }
 
+        // DB
         String sourcesRaw = props.getProperty("db.sources");
 
         if (sourcesRaw != null && !sourcesRaw.isBlank()) {
@@ -58,6 +59,27 @@ public class ConfigLoader {
                     .collect(Collectors.toList());
 
             config.setDbSources(dbSources);
+        }
+
+        // GRAPH
+        String graphRaw = props.getProperty("graph.sources");
+
+        if (graphRaw != null && !graphRaw.isBlank()) {
+
+            List<GraphSource> graphSources = Arrays.stream(graphRaw.split(","))
+                    .map(String::trim)
+                    .filter(name -> props.getProperty("graph." + name + ".uri") != null)
+                    .map(name -> {
+
+                        String uri = props.getProperty("graph." + name + ".uri");
+                        String user = props.getProperty("graph." + name + ".user");
+                        String pass = props.getProperty("graph." + name + ".password");
+
+                        return new GraphSource(name, uri, user, pass);
+                    })
+                    .collect(Collectors.toList());
+
+            config.setGraphSources(graphSources);
         }
 
         config.setDbUrl(props.getProperty("db.url"));

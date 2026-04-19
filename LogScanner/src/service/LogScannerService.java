@@ -7,12 +7,14 @@ import alert.impl.SimpleAlertService;
 import alert.impl.TelegramAlertService;
 import config.AppConfig;
 import config.DbSource;
+import config.GraphSource;
 import config.MongoSource;
 import model.LogEvent;
 import normalizer.LogNormalizer;
 import normalizer.impl.SimpleLogNormalizer;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
+import processor.impl.GraphLogProcessor;
 import processor.impl.NoSqlDBProcessor;
 import processor.impl.RelationalDbProcessor;
 import util.EncodingDetector;
@@ -70,13 +72,13 @@ public class LogScannerService {
                             writer.write(normalized);
 
                         } catch (Exception e) {
-                            System.err.println(" Ошибка события:");
+                            System.err.println("Ошибка события:");
                             e.printStackTrace();
                         }
                     });
 
                 } catch (Exception e) {
-                    System.err.println(" Ошибка файла: " + filePath);
+                    System.err.println("Ошибка файла: " + filePath);
                     e.printStackTrace();
                 }
             }
@@ -84,7 +86,7 @@ public class LogScannerService {
             //  DATABASES
             for (DbSource db : config.getDbSources()) {
 
-                System.out.println("🗄 Подключение к БД: " + db.getName());
+                System.out.println("Подключение к БД: " + db.getName());
 
                 try {
                     LogProcessor processor =
@@ -111,13 +113,12 @@ public class LogScannerService {
                     });
 
                 } catch (Exception e) {
-                    System.err.println(" Ошибка подключения к БД: " + db.getName());
+                    System.err.println("Ошибка подключения к БД: " + db.getName());
                     e.printStackTrace();
                 }
             }
 
             try {
-
                 //  MONGO
                 for (MongoSource mongo : config.getMongoSources()) {
 
@@ -137,17 +138,50 @@ public class LogScannerService {
                                 writer.write(normalized);
 
                             } catch (Exception e) {
-                                System.err.println("❌ Ошибка события (Mongo):");
+                                System.err.println("Ошибка события (Mongo):");
                                 e.printStackTrace();
                             }
                         });
 
                     } catch (Exception e) {
-                        System.err.println("❌ Ошибка подключения к Mongo: " + mongo.getName());
+                        System.err.println(" Ошибка подключения к Mongo: " + mongo.getName());
                         e.printStackTrace();
                     }
                 }
 
+                // GRAPH DB
+                for (GraphSource graph : config.getGraphSources()) {
+
+                    System.out.println("Подключение к Graph DB: " + graph.getName());
+
+                    try {
+                        LogProcessor processor =
+                                new GraphLogProcessor(
+                                        graph.getUser(),
+                                        graph.getPassword()
+                                );
+
+                        processor.process(graph.getUri(), null, event -> {
+
+                            try {
+                                LogEvent normalized = normalizer.normalize(event);
+
+                                if (normalized == null) return;
+
+                                alertService.process(normalized);
+                                writer.write(normalized);
+
+                            } catch (Exception e) {
+                                System.err.println("Ошибка события (Graph):");
+                                e.printStackTrace();
+                            }
+                        });
+
+                    } catch (Exception e) {
+                        System.err.println("Ошибка подключения к Graph DB: " + graph.getName());
+                        e.printStackTrace();
+                    }
+                }
             } finally {
                 writer.close();
             }

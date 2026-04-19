@@ -2,26 +2,33 @@ package processor.impl;
 
 import model.LogEvent;
 import org.neo4j.driver.*;
-import processor.LogProcessor;
 import org.neo4j.driver.Record;
+import processor.LogProcessor;
+
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class GraphLogProcessor implements LogProcessor {
 
+    private final String username;
+    private final String password;
+
+    public GraphLogProcessor(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+
     @Override
-    public List<LogEvent> process(String uri, List<String> levels) throws Exception {
-
-        List<LogEvent> events = new ArrayList<>();
-
-        // (потом вынести
-        String username = "neo4j";
-        String password = "password";
+    public void process(String uri,
+                        String encoding,
+                        Consumer<LogEvent> consumer) throws Exception {
 
         try (Driver driver = GraphDatabase.driver(uri, AuthTokens.basic(username, password));
              Session session = driver.session()) {
+
+            System.out.println(" Подключение к Graph DB");
 
             String query = "MATCH (n) RETURN labels(n) AS labels, n{.*} AS props LIMIT 1000";
 
@@ -31,45 +38,31 @@ public class GraphLogProcessor implements LogProcessor {
 
                 Record record = result.next();
 
-                List<String> labels = record.get("labels").asList(Value::asString);
-                Map<String, Object> properties = record.get("props").asMap();
+                List<String> labels =
+                        record.get("labels").asList(Value::asString);
 
-                if (containsLevel(properties, levels)) {
+                Map<String, Object> properties =
+                        record.get("props").asMap();
 
-                    String message = formatNode(labels, properties);
+                String message = formatNode(labels, properties);
 
-                    events.add(new LogEvent(
-                            Instant.now(),
-                            "GRAPH_DB",
-                            "UNKNOWN",
-                            message
-                    ));
-                }
+                if (message == null || message.isBlank()) continue;
+
+                consumer.accept(new LogEvent(
+                        Instant.now(),
+                        "GRAPH_DB",
+                        "UNKNOWN",
+                        message
+                ));
             }
         }
-
-        return events;
     }
 
-    private boolean containsLevel(Map<String, Object> properties, List<String> levels) {
 
-        for (Object value : properties.values()) {
+    // Форматирование
 
-            if (value instanceof String) {
-
-                String str = ((String) value).toLowerCase();
-
-                boolean match = levels.stream()
-                        .anyMatch(level -> str.contains(level.toLowerCase()));
-
-                if (match) return true;
-            }
-        }
-
-        return false;
-    }
-
-    private String formatNode(List<String> labels, Map<String, Object> properties) {
+    private String formatNode(List<String> labels,
+                              Map<String, Object> properties) {
 
         return "Labels: " + labels + " | Properties: " + properties;
     }
