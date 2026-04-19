@@ -1,7 +1,11 @@
 package service;
 
 import alert.AlertService;
+import alert.impl.EmailAlertService;
+import alert.impl.MultiAlertService;
 import alert.impl.SimpleAlertService;
+import alert.impl.TelegramAlertService;
+import config.AppConfig;
 import model.LogEvent;
 import normalizer.LogNormalizer;
 import normalizer.impl.SimpleLogNormalizer;
@@ -9,56 +13,119 @@ import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
 import util.EncodingDetector;
 import util.FileScanner;
+import util.FileUtils;
 import writer.impl.FileLogWriter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class LogScannerService {
 
-    public void processDirectory(String inputDir,
-                                 String output,
-                                 List<String> levels) throws Exception {
+    public void processDirectory(AppConfig config) throws Exception {
 
-        List<String> files = FileScanner.scan(inputDir);
+        // 📂 1. Сканируем файлы
+        List<String> files = FileScanner.scan(config.getInputDir());
 
-        LogNormalizer normalizer = new SimpleLogNormalizer(levels);
-        AlertService alertService = new SimpleAlertService();
-        FileLogWriter writer = new FileLogWriter(output);
+        // 🧠 2. Normalizer
+        LogNormalizer normalizer =
+                new SimpleLogNormalizer(config.getLevels());
+
+        // 🚨 3. AlertService (сборка через config)
+        AlertService alertService = buildAlertService(config);
+
+        // 📝 4. Writer
+        FileLogWriter writer =
+                new FileLogWriter(config.getOutputFile());
 
         try {
             for (String filePath : files) {
 
                 System.out.println("📄 Обработка файла: " + filePath);
 
-                String encoding = EncodingDetector.detectEncoding(filePath);
+                try {
+                    // 🔍 5. Кодировка
+                    String encoding =
+                            EncodingDetector.detectEncoding(filePath);
 
-                String format = util.FileUtils.detectFormat(filePath);
+                    // 📄 6. Формат
+                    String format =
+                            FileUtils.detectFormat(filePath);
 
-                LogProcessor processor =
-                        LogProcessorFactory.getProcessor(format);
+                    // 🧩 7. Processor
+                    LogProcessor processor =
+                            LogProcessorFactory.getProcessor(format);
 
-                processor.process(filePath, encoding, event -> {
+                    // 🚀 8. Стриминг
+                    processor.process(filePath, encoding, event -> {
 
-                    try {
-                        LogEvent normalized = normalizer.normalize(event);
+                        try {
+                            // 🧠 нормализация
+                            LogEvent normalized =
+                                    normalizer.normalize(event);
 
-                        if (normalized == null) return;
+                            if (normalized == null) return;
 
-                        alertService.process(normalized);
-                        writer.write(normalized);
+                            // 🚨 alert
+                            alertService.process(normalized);
 
-                    } catch (Exception e) {
+                            // 📝 запись
+                            writer.write(normalized);
 
-                        System.err.println("❌ Ошибка обработки события:");
-                        System.err.println("Файл: " + filePath);
-                        System.err.println("Сообщение: " + event.getMessage());
-                        e.printStackTrace();
-                    }
-                });
+                        } catch (Exception e) {
+                            System.err.println("❌ Ошибка обработки события:");
+                            System.err.println("Файл: " + filePath);
+                            System.err.println("Сообщение: " + event.getMessage());
+                            e.printStackTrace();
+                        }
+                    });
+
+                } catch (Exception e) {
+                    System.err.println("❌ Ошибка обработки файла: " + filePath);
+                    e.printStackTrace();
+                }
             }
 
         } finally {
             writer.close();
         }
+
+        System.out.println("✅ Обработка завершена");
+    }
+
+    // =========================
+    // 🔧 Сборка AlertService
+    // =========================
+    private AlertService buildAlertService(AppConfig config) {
+
+        List<AlertService> services = new ArrayList<>();
+
+        // 📟 Console alert (всегда)
+        services.add(new SimpleAlertService(config.getAlertLevels()));
+
+        // 📧 Email (если настроен)
+        if (config.getEmailFrom() != null &&
+                config.getEmailPassword() != null &&
+                config.getEmailTo() != null) {
+
+            services.add(new EmailAlertService(
+                    config.getSmtpHost(),
+                    config.getSmtpPort(),
+                    config.getEmailFrom(),
+                    config.getEmailPassword(),
+                    config.getEmailTo()
+            ));
+        }
+
+        // 🤖 Telegram (если настроен)
+        if (config.getTelegramBotToken() != null &&
+                config.getTelegramChatId() != null) {
+
+            services.add(new TelegramAlertService(
+                    config.getTelegramBotToken(),
+                    config.getTelegramChatId()
+            ));
+        }
+
+        return new MultiAlertService(services);
     }
 }
