@@ -41,12 +41,12 @@ public class LogProcessorFactory {
             case "wt":
             case "couch":
             case "bson":
-                return new NoSqlDBProcessor();
+                return buildMongoProcessor(config);
 
             // Graph
             case "store":
             case "index":
-                return new GraphLogProcessor();
+                return buildGraphProcessor(config);
 
             default:
                 throw new IllegalArgumentException(
@@ -66,5 +66,23 @@ public class LogProcessorFactory {
                 config.getDbUser(),
                 config.getDbPassword()
         );
+    }
+
+    private static LogProcessor buildGraphProcessor(AppConfig config) {
+
+        if (config.getGraphSources() == null || config.getGraphSources().isEmpty()) {
+            throw new RuntimeException("graph.sources не задан");
+        }
+
+        return new CompositeGraphProcessor(config.getGraphSources());
+    }
+
+    private static LogProcessor buildMongoProcessor(AppConfig config) {
+
+        if (config.getMongoSources() == null || config.getMongoSources().isEmpty()) {
+            throw new RuntimeException("mongo.sources не заданы");
+        }
+
+        return new CompositeNoSqlProcessor(config.getMongoSources());
     }
 }
