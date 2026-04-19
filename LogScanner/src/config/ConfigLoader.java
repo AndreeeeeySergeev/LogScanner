@@ -18,18 +18,58 @@ public class ConfigLoader {
             throw new RuntimeException("Ошибка загрузки config", e);
         }
 
-        // levels
-        String levelsRaw = props.getProperty("levels", "critical, error, warning, warn, fatal, alert, emergency");
+        AppConfig config = new AppConfig();
 
-        List<String> levels = Arrays.stream(levelsRaw.split(","))
+
+        // LEVELS (с дефолтом)
+
+        String levelsRaw = props.getProperty(
+                "levels",
+                "CRITICAL,ERROR,WARNING,WARN,FATAL,ALERT,EMERGENCY"
+        );
+
+        List<String> levels = parse(levelsRaw);
+        config.setLevels(levels);
+
+
+        // ALERT LEVELS
+
+        String alertLevelsRaw = props.getProperty(
+                "alertLevels",
+                "ERROR,CRITICAL,FATAL,ALERT,EMERGENCY"
+        );
+
+        List<String> alertLevels = parse(alertLevelsRaw);
+        config.setAlertLevels(alertLevels);
+
+
+        // PATHS
+
+        config.setInputDir(props.getProperty("inputDir", "input"));
+        config.setOutputFile(props.getProperty("outputFile", "output/result.log"));
+
+
+        // EMAIL
+
+        config.setSmtpHost(props.getProperty("smtpHost", "smtp.gmail.com"));
+        config.setSmtpPort(props.getProperty("smtpPort", "587"));
+        config.setEmailFrom(props.getProperty("emailFrom"));
+        config.setEmailPassword(props.getProperty("emailPassword"));
+        config.setEmailTo(props.getProperty("emailTo"));
+
+
+        // TELEGRAM
+
+        config.setTelegramBotToken(props.getProperty("telegramBotToken"));
+        config.setTelegramChatId(props.getProperty("telegramChatId"));
+
+        return config;
+    }
+
+    private static List<String> parse(String raw) {
+        return Arrays.stream(raw.split(","))
                 .map(String::trim)
                 .map(String::toUpperCase)
                 .collect(Collectors.toList());
-
-        // input / output
-        String inputDir = props.getProperty("inputDir", "input");
-        String outputFile = props.getProperty("outputFile", "output/result.log");
-
-        return new AppConfig(levels, inputDir, outputFile);
     }
 }

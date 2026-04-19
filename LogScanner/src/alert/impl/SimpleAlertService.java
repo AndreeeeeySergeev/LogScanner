@@ -4,26 +4,25 @@ import alert.AlertService;
 import model.LogEvent;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class SimpleAlertService implements AlertService {
 
-    private static final Set<String> ALERT_LEVELS = Set.of(
-            "ERROR",
-            "CRITICAL",
-            "FATAL",
-            "ALERT",
-            "EMERGENCY"
-    );
+    private final Set<String> alertLevels;
+
+    public SimpleAlertService(Iterable<String> alertLevels) {
+        this.alertLevels = toUpperSet(alertLevels);
+    }
 
     @Override
     public void process(LogEvent event) {
 
-        String level = event.getLevel();
+        if (event == null) return;
 
+        String level = event.getLevel();
         if (level == null) return;
 
-        if (ALERT_LEVELS.contains(level.toUpperCase())) {
-
+        if (alertLevels.contains(level.toUpperCase())) {
             sendAlert(event);
         }
     }
@@ -36,5 +35,12 @@ public class SimpleAlertService implements AlertService {
         System.out.println("Level: " + event.getLevel());
         System.out.println("Message: " + event.getMessage());
         System.out.println("------------------------------------------------");
+    }
+
+    private Set<String> toUpperSet(Iterable<String> levels) {
+        return levels == null ? Set.of() :
+                ((java.util.Collection<String>) levels).stream()
+                        .map(String::toUpperCase)
+                        .collect(Collectors.toSet());
     }
 }

@@ -1,3 +1,18 @@
-levels=ERROR,CRITICAL,WARN
-inputDir=input
+# файлы
+inputDir=logs
 outputFile=output/result.log
+
+# уровни
+levels=INFO,ERROR,CRITICAL
+alertLevels=ERROR,CRITICAL
+
+# email
+smtpHost=smtp.gmail.com
+smtpPort=587
+emailFrom=your@gmail.com
+emailPassword=app-password
+emailTo=admin@gmail.com
+
+# telegram
+telegramBotToken=123456:ABC
+telegramChatId=987654321
