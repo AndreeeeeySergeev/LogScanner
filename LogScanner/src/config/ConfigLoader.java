@@ -21,6 +21,32 @@ public class ConfigLoader {
         AppConfig config = new AppConfig();
 
 
+        // DATABASE
+
+        String sourcesRaw = props.getProperty("db.sources");
+
+        if (sourcesRaw != null && !sourcesRaw.isBlank()) {
+
+            List<DbSource> dbSources = Arrays.stream(sourcesRaw.split(","))
+                    .map(String::trim)
+                    .filter(name -> props.getProperty("db." + name + ".url") != null)
+                    .map(name -> {
+                        String url = props.getProperty("db." + name + ".url");
+                        String user = props.getProperty("db." + name + ".user");
+                        String pass = props.getProperty("db." + name + ".password");
+
+                        return new DbSource(name, url, user, pass);
+                    })
+                    .collect(Collectors.toList());
+
+            config.setDbSources(dbSources);
+        }
+
+        config.setDbUrl(props.getProperty("db.url"));
+        config.setDbUser(props.getProperty("db.user"));
+        config.setDbPassword(props.getProperty("db.password"));
+
+
         // LEVELS (с дефолтом)
 
         String levelsRaw = props.getProperty(
@@ -67,8 +93,14 @@ public class ConfigLoader {
     }
 
     private static List<String> parse(String raw) {
+
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+
         return Arrays.stream(raw.split(","))
                 .map(String::trim)
+                .filter(s -> !s.isEmpty())   //ВАЖНО
                 .map(String::toUpperCase)
                 .collect(Collectors.toList());
     }

@@ -6,25 +6,27 @@ import processor.LogProcessor;
 import java.sql.*;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class RelationalDbProcessor implements LogProcessor {
 
+    private final String username;
+    private final String password;
+
+    public RelationalDbProcessor(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+
     @Override
-    public List<LogEvent> process(String jdbcUrl, List<String> levels) throws Exception {
-
-        List<LogEvent> events = new ArrayList<>();
-
-        // потом вынесем в конфиг
-        String username = "user";
-        String password = "password";
+    public void process(String jdbcUrl,
+                        String encoding,
+                        Consumer<LogEvent> consumer) throws Exception {
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
 
-            if (!hasRequiredPrivileges(conn)) {
-                throw new SQLException("Недостаточно прав");
-            }
+            System.out.println("🔌 Подключение к БД: " + jdbcUrl);
 
             DatabaseMetaData meta = conn.getMetaData();
 
@@ -34,39 +36,47 @@ public class RelationalDbProcessor implements LogProcessor {
 
                     String tableName = tables.getString("TABLE_NAME");
 
-                    searchTable(conn, tableName, levels, events);
+                    processTable(conn, tableName, consumer);
                 }
             }
-
         }
-
-        return events;
     }
 
-    private void searchTable(Connection conn,
-                             String tableName,
-                             List<String> levels,
-                             List<LogEvent> events) throws SQLException {
+    // Таблица
+    private void processTable(Connection conn,
+                              String tableName,
+                              Consumer<LogEvent> consumer) throws SQLException {
 
         List<String> columns = findCandidateColumns(conn, tableName);
 
+        if (columns.isEmpty()) return;
+
         for (String column : columns) {
-            searchColumn(conn, tableName, column, levels, events);
+            processColumn(conn, tableName, column, consumer);
         }
     }
 
-    private List<String> findCandidateColumns(Connection conn, String tableName) throws SQLException {
+    // Поиск колонок
+    private List<String> findCandidateColumns(Connection conn,
+                                              String tableName) throws SQLException {
 
         List<String> columns = new ArrayList<>();
-        List<String> keywords = Arrays.asList("level", "log", "severity", "status", "type");
 
-        try (ResultSet rs = conn.getMetaData().getColumns(null, null, tableName, null)) {
+        try (ResultSet rs = conn.getMetaData()
+                .getColumns(null, null, tableName, null)) {
 
             while (rs.next()) {
 
-                String columnName = rs.getString("COLUMN_NAME").toLowerCase();
+                String columnName = rs.getString("COLUMN_NAME");
 
-                if (keywords.stream().anyMatch(columnName::contains)) {
+                String lower = columnName.toLowerCase();
+
+                if (lower.contains("log") ||
+                        lower.contains("message") ||
+                        lower.contains("level") ||
+                        lower.contains("severity") ||
+                        lower.contains("event")) {
+
                     columns.add(columnName);
                 }
             }
@@ -75,76 +85,30 @@ public class RelationalDbProcessor implements LogProcessor {
         return columns;
     }
 
-    private void searchColumn(Connection conn,
-                              String tableName,
-                              String column,
-                              List<String> levels,
-                              List<LogEvent> events) throws SQLException {
+    // Чтение данных
+    private void processColumn(Connection conn,
+                               String tableName,
+                               String column,
+                               Consumer<LogEvent> consumer) throws SQLException {
 
-        String dbProduct = conn.getMetaData().getDatabaseProductName().toLowerCase();
-
-        String limitClause;
-
-        if (dbProduct.contains("oracle")) {
-            limitClause = " FETCH FIRST 1000 ROWS ONLY";
-        } else if (dbProduct.contains("sql server")) {
-            limitClause = " OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY";
-        } else {
-            limitClause = " LIMIT 1000";
-        }
-
-        String whereClause = levels.stream()
-                .map(level -> "LOWER(" + column + ") LIKE '%" + level.toLowerCase() + "%'")
-                .reduce((a, b) -> a + " OR " + b)
-                .orElse("");
-
-        String query = "SELECT * FROM " + tableName +
-                " WHERE " + whereClause +
-                limitClause;
+        String query = "SELECT " + column + " FROM " + tableName;
 
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
 
-            ResultSetMetaData meta = rs.getMetaData();
-            int columnCount = meta.getColumnCount();
-
             while (rs.next()) {
 
-                StringBuilder row = new StringBuilder();
+                String value = rs.getString(1);
 
-                for (int i = 1; i <= columnCount; i++) {
+                if (value == null || value.isBlank()) continue;
 
-                    String value = rs.getString(i);
-
-                    if (value != null) {
-                        row.append(meta.getColumnName(i))
-                                .append(": ")
-                                .append(value)
-                                .append(" | ");
-                    }
-                }
-
-                String message = row.toString();
-
-                events.add(new LogEvent(
+                consumer.accept(new LogEvent(
                         Instant.now(),
                         "REL_DB",
                         "UNKNOWN",
-                        message
+                        value
                 ));
             }
-        }
-    }
-
-    private boolean hasRequiredPrivileges(Connection conn) {
-
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT 1")) {
-
-            return rs.next();
-
-        } catch (SQLException e) {
-            return false;
         }
     }
 }

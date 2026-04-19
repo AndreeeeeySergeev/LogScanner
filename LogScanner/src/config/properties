@@ -2,6 +2,17 @@
 inputDir=logs
 outputFile=output/result.log
 
+# DB
+db.sources=main,backup
+
+db.main.url=jdbc:postgresql://localhost:5432/logs
+db.main.user=postgres
+db.main.password=1234
+
+db.backup.url=jdbc:mysql://localhost:3306/logs
+db.backup.user=root
+db.backup.password=1234
+
 # уровни
 levels=INFO,ERROR,CRITICAL
 alertLevels=ERROR,CRITICAL

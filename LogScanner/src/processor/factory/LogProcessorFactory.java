@@ -1,58 +1,70 @@
 package processor.factory;
 
+import config.AppConfig;
 import processor.LogProcessor;
 import processor.impl.*;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class LogProcessorFactory {
 
-    private static final Map<String, LogProcessor> processors = new HashMap<>();
+    public static LogProcessor getProcessor(String format, AppConfig config) {
 
-    static {
-        // файловые процессоры
-        processors.put("json", new JsonLogProcessor());
-        processors.put("xml", new XmlLogProcessor());
+        switch (format.toLowerCase()) {
 
-        LogProcessor textProcessor = new TextLogProcessor();
-        processors.put("txt", textProcessor);
-        processors.put("log", textProcessor);
-        processors.put("csv", textProcessor);
+            // TEXT
+            case "txt":
+            case "log":
+            case "csv":
+                return new TextLogProcessor();
 
-        // реляционные БД
-        LogProcessor relational = new RelationalDbProcessor();
-        processors.put("sql", relational);
-        processors.put("dump", relational);
-        processors.put("dat", relational);
-        processors.put("bak", relational);
-        processors.put("du", relational);
-        processors.put("mdf", relational);
-        processors.put("ibd", relational);
-        processors.put("db", relational);
-        processors.put("sqlite", relational);
 
-        // NoSQL
-        LogProcessor nosql = new NoSqlDBProcessor();
-        processors.put("wt", nosql);
-        processors.put("couch", nosql);
-        processors.put("bson", nosql);
+            // JSON
+            case "json":
+                return new JsonLogProcessor();
 
-        // Graph
-        LogProcessor graph = new GraphLogProcessor();
-        processors.put("store", graph);
-        processors.put("index", graph);
+            // XML
+            case "xml":
+                return new XmlLogProcessor();
+
+            // RELATIONAL DB
+            case "sql":
+            case "dump":
+            case "dat":
+            case "bak":
+            case "du":
+            case "mdf":
+            case "ibd":
+            case "db":
+            case "sqlite":
+                return buildDbProcessor(config);
+
+            // NoSQL
+            case "wt":
+            case "couch":
+            case "bson":
+                return new NoSqlDBProcessor();
+
+            // Graph
+            case "store":
+            case "index":
+                return new GraphLogProcessor();
+
+            default:
+                throw new IllegalArgumentException(
+                        "Неподдерживаемый формат: " + format);
+        }
     }
 
-    public static LogProcessor getProcessor(String format) {
 
-        LogProcessor processor = processors.get(format.toLowerCase());
+    // DB builder
+    private static LogProcessor buildDbProcessor(AppConfig config) {
 
-        if (processor == null) {
-            throw new IllegalArgumentException(
-                    "Неподдерживаемый формат: " + format);
+        if (config.getDbUrl() == null || config.getDbUrl().isBlank()) {
+            throw new RuntimeException("db.url не задан в config");
         }
 
-        return processor;
+        return new RelationalDbProcessor(
+                config.getDbUser(),
+                config.getDbPassword()
+        );
     }
 }

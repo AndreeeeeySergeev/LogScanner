@@ -6,11 +6,13 @@ import alert.impl.MultiAlertService;
 import alert.impl.SimpleAlertService;
 import alert.impl.TelegramAlertService;
 import config.AppConfig;
+import config.DbSource;
 import model.LogEvent;
 import normalizer.LogNormalizer;
 import normalizer.impl.SimpleLogNormalizer;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
+import processor.impl.RelationalDbProcessor;
 import util.EncodingDetector;
 import util.FileScanner;
 import util.FileUtils;
@@ -23,64 +25,95 @@ public class LogScannerService {
 
     public void processDirectory(AppConfig config) throws Exception {
 
-        // 📂 1. Сканируем файлы
+        // 1. Сканируем файлы
         List<String> files = FileScanner.scan(config.getInputDir());
 
-        // 🧠 2. Normalizer
+        // 2. Normalizer
         LogNormalizer normalizer =
                 new SimpleLogNormalizer(config.getLevels());
 
-        // 🚨 3. AlertService (сборка через config)
+        // 3. AlertService
         AlertService alertService = buildAlertService(config);
 
-        // 📝 4. Writer
+        // 4. Writer
         FileLogWriter writer =
                 new FileLogWriter(config.getOutputFile());
 
         try {
+
+            // =========================
+            // 📄 ФАЙЛЫ
+            // =========================
             for (String filePath : files) {
 
                 System.out.println("📄 Обработка файла: " + filePath);
 
                 try {
-                    // 🔍 5. Кодировка
                     String encoding =
                             EncodingDetector.detectEncoding(filePath);
 
-                    // 📄 6. Формат
                     String format =
                             FileUtils.detectFormat(filePath);
 
-                    // 🧩 7. Processor
                     LogProcessor processor =
-                            LogProcessorFactory.getProcessor(format);
+                            LogProcessorFactory.getProcessor(format, config);
 
-                    // 🚀 8. Стриминг
                     processor.process(filePath, encoding, event -> {
 
                         try {
-                            // 🧠 нормализация
                             LogEvent normalized =
                                     normalizer.normalize(event);
 
                             if (normalized == null) return;
 
-                            // 🚨 alert
                             alertService.process(normalized);
-
-                            // 📝 запись
                             writer.write(normalized);
 
                         } catch (Exception e) {
-                            System.err.println("❌ Ошибка обработки события:");
-                            System.err.println("Файл: " + filePath);
-                            System.err.println("Сообщение: " + event.getMessage());
+                            System.err.println("❌ Ошибка события:");
                             e.printStackTrace();
                         }
                     });
 
                 } catch (Exception e) {
-                    System.err.println("❌ Ошибка обработки файла: " + filePath);
+                    System.err.println("❌ Ошибка файла: " + filePath);
+                    e.printStackTrace();
+                }
+            }
+
+            // =========================
+            // 🗄 DATABASES
+            // =========================
+            for (DbSource db : config.getDbSources()) {
+
+                System.out.println("🗄 Подключение к БД: " + db.getName());
+
+                try {
+                    LogProcessor processor =
+                            new RelationalDbProcessor(
+                                    db.getUser(),
+                                    db.getPassword()
+                            );
+
+                    processor.process(db.getUrl(), null, event -> {
+
+                        try {
+                            LogEvent normalized =
+                                    normalizer.normalize(event);
+
+                            if (normalized == null) return;
+
+                            alertService.process(normalized);
+                            writer.write(normalized);
+
+                        } catch (Exception e) {
+                            System.err.println("❌ Ошибка события (DB):");
+                            e.printStackTrace();
+                        }
+                    });
+
+                } catch (Exception e) {
+                    System.err.println("❌ Ошибка подключения к БД: " + db.getName());
                     e.printStackTrace();
                 }
             }
@@ -93,16 +126,14 @@ public class LogScannerService {
     }
 
     // =========================
-    // 🔧 Сборка AlertService
+    // 🔧 Alert builder
     // =========================
     private AlertService buildAlertService(AppConfig config) {
 
         List<AlertService> services = new ArrayList<>();
 
-        // 📟 Console alert (всегда)
         services.add(new SimpleAlertService(config.getAlertLevels()));
 
-        // 📧 Email (если настроен)
         if (config.getEmailFrom() != null &&
                 config.getEmailPassword() != null &&
                 config.getEmailTo() != null) {
@@ -116,7 +147,6 @@ public class LogScannerService {
             ));
         }
 
-        // 🤖 Telegram (если настроен)
         if (config.getTelegramBotToken() != null &&
                 config.getTelegramChatId() != null) {
 

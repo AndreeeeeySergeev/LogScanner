@@ -4,13 +4,20 @@ import java.util.List;
 
 public class AppConfig {
 
+    // DB
+    private String dbUrl;
+    private String dbUser;
+    private String dbPassword;
+    private List<DbSource> dbSources = List.of();
+
     // файлы
     private String inputDir;
     private String outputFile;
 
     // уровни
-    private List<String> levels;
-    private List<String> alertLevels;
+    private List<String> levels = List.of();
+    private List<String> alertLevels = List.of();
+
 
     // email
     private String smtpHost;
@@ -24,6 +31,15 @@ public class AppConfig {
     private String telegramChatId;
 
     // --- getters / setters ---
+
+    public String getDbUrl() { return dbUrl; }
+    public void setDbUrl(String dbUrl) { this.dbUrl = dbUrl; }
+
+    public String getDbUser() { return dbUser; }
+    public void setDbUser(String dbUser) { this.dbUser = dbUser; }
+
+    public String getDbPassword() { return dbPassword; }
+    public void setDbPassword(String dbPassword) { this.dbPassword = dbPassword; }
 
     public String getInputDir() { return inputDir; }
     public void setInputDir(String inputDir) { this.inputDir = inputDir; }
@@ -57,4 +73,8 @@ public class AppConfig {
 
     public String getTelegramChatId() { return telegramChatId; }
     public void setTelegramChatId(String telegramChatId) { this.telegramChatId = telegramChatId; }
+
+    public List<DbSource> getDbSources() { return dbSources; }
+
+    public void setDbSources(List<DbSource> dbSources) { this.dbSources = dbSources; }
 }
