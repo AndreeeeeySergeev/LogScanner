@@ -13,6 +13,12 @@ db.backup.url=jdbc:mysql://localhost:3306/logs
 db.backup.user=root
 db.backup.password=1234
 
+# Mongo
+mongo.sources=main,backup
+
+mongo.main.uri=mongodb://localhost:27017
+mongo.backup.uri=mongodb://backup:27017
+
 # уровни
 levels=INFO,ERROR,CRITICAL
 alertLevels=ERROR,CRITICAL

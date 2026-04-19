@@ -9,6 +9,7 @@ public class AppConfig {
     private String dbUser;
     private String dbPassword;
     private List<DbSource> dbSources = List.of();
+    private List<MongoSource> mongoSources = List.of();
 
     // файлы
     private String inputDir;
@@ -75,6 +76,8 @@ public class AppConfig {
     public void setTelegramChatId(String telegramChatId) { this.telegramChatId = telegramChatId; }
 
     public List<DbSource> getDbSources() { return dbSources; }
-
     public void setDbSources(List<DbSource> dbSources) { this.dbSources = dbSources; }
+
+    public List<MongoSource> getMongoSources() { return mongoSources; }
+    public void setMongoSources(List<MongoSource> mongoSources) { this.mongoSources = mongoSources; }
 }

@@ -7,11 +7,13 @@ import alert.impl.SimpleAlertService;
 import alert.impl.TelegramAlertService;
 import config.AppConfig;
 import config.DbSource;
+import config.MongoSource;
 import model.LogEvent;
 import normalizer.LogNormalizer;
 import normalizer.impl.SimpleLogNormalizer;
 import processor.LogProcessor;
 import processor.factory.LogProcessorFactory;
+import processor.impl.NoSqlDBProcessor;
 import processor.impl.RelationalDbProcessor;
 import util.EncodingDetector;
 import util.FileScanner;
@@ -41,9 +43,7 @@ public class LogScannerService {
 
         try {
 
-            // =========================
-            // 📄 ФАЙЛЫ
-            // =========================
+            // ФАЙЛЫ
             for (String filePath : files) {
 
                 System.out.println("📄 Обработка файла: " + filePath);
@@ -70,20 +70,18 @@ public class LogScannerService {
                             writer.write(normalized);
 
                         } catch (Exception e) {
-                            System.err.println("❌ Ошибка события:");
+                            System.err.println(" Ошибка события:");
                             e.printStackTrace();
                         }
                     });
 
                 } catch (Exception e) {
-                    System.err.println("❌ Ошибка файла: " + filePath);
+                    System.err.println(" Ошибка файла: " + filePath);
                     e.printStackTrace();
                 }
             }
 
-            // =========================
-            // 🗄 DATABASES
-            // =========================
+            //  DATABASES
             for (DbSource db : config.getDbSources()) {
 
                 System.out.println("🗄 Подключение к БД: " + db.getName());
@@ -107,15 +105,51 @@ public class LogScannerService {
                             writer.write(normalized);
 
                         } catch (Exception e) {
-                            System.err.println("❌ Ошибка события (DB):");
+                            System.err.println("Ошибка события (DB):");
                             e.printStackTrace();
                         }
                     });
 
                 } catch (Exception e) {
-                    System.err.println("❌ Ошибка подключения к БД: " + db.getName());
+                    System.err.println(" Ошибка подключения к БД: " + db.getName());
                     e.printStackTrace();
                 }
+            }
+
+            try {
+
+                //  MONGO
+                for (MongoSource mongo : config.getMongoSources()) {
+
+                    System.out.println("Подключение к Mongo: " + mongo.getName());
+
+                    try {
+                        LogProcessor processor = new NoSqlDBProcessor();
+
+                        processor.process(mongo.getUri(), null, event -> {
+
+                            try {
+                                LogEvent normalized = normalizer.normalize(event);
+
+                                if (normalized == null) return;
+
+                                alertService.process(normalized);
+                                writer.write(normalized);
+
+                            } catch (Exception e) {
+                                System.err.println("❌ Ошибка события (Mongo):");
+                                e.printStackTrace();
+                            }
+                        });
+
+                    } catch (Exception e) {
+                        System.err.println("❌ Ошибка подключения к Mongo: " + mongo.getName());
+                        e.printStackTrace();
+                    }
+                }
+
+            } finally {
+                writer.close();
             }
 
         } finally {
@@ -125,9 +159,7 @@ public class LogScannerService {
         System.out.println("✅ Обработка завершена");
     }
 
-    // =========================
-    // 🔧 Alert builder
-    // =========================
+    // Alert builder
     private AlertService buildAlertService(AppConfig config) {
 
         List<AlertService> services = new ArrayList<>();

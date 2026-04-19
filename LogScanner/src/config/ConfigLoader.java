@@ -22,6 +22,24 @@ public class ConfigLoader {
 
 
         // DATABASE
+        // MONGO
+        String mongoRaw = props.getProperty("mongo.sources");
+
+        if (mongoRaw != null && !mongoRaw.isBlank()) {
+
+            List<MongoSource> mongoSources = Arrays.stream(mongoRaw.split(","))
+                    .map(String::trim)
+                    .filter(name -> props.getProperty("mongo." + name + ".uri") != null)
+                    .map(name -> {
+
+                        String uri = props.getProperty("mongo." + name + ".uri");
+
+                        return new MongoSource(name, uri);
+                    })
+                    .collect(Collectors.toList());
+
+            config.setMongoSources(mongoSources);
+        }
 
         String sourcesRaw = props.getProperty("db.sources");
 
@@ -48,7 +66,6 @@ public class ConfigLoader {
 
 
         // LEVELS (с дефолтом)
-
         String levelsRaw = props.getProperty(
                 "levels",
                 "CRITICAL,ERROR,WARNING,WARN,FATAL,ALERT,EMERGENCY"
@@ -57,9 +74,7 @@ public class ConfigLoader {
         List<String> levels = parse(levelsRaw);
         config.setLevels(levels);
 
-
         // ALERT LEVELS
-
         String alertLevelsRaw = props.getProperty(
                 "alertLevels",
                 "ERROR,CRITICAL,FATAL,ALERT,EMERGENCY"
@@ -68,24 +83,18 @@ public class ConfigLoader {
         List<String> alertLevels = parse(alertLevelsRaw);
         config.setAlertLevels(alertLevels);
 
-
         // PATHS
-
         config.setInputDir(props.getProperty("inputDir", "input"));
         config.setOutputFile(props.getProperty("outputFile", "output/result.log"));
 
-
         // EMAIL
-
         config.setSmtpHost(props.getProperty("smtpHost", "smtp.gmail.com"));
         config.setSmtpPort(props.getProperty("smtpPort", "587"));
         config.setEmailFrom(props.getProperty("emailFrom"));
         config.setEmailPassword(props.getProperty("emailPassword"));
         config.setEmailTo(props.getProperty("emailTo"));
 
-
         // TELEGRAM
-
         config.setTelegramBotToken(props.getProperty("telegramBotToken"));
         config.setTelegramChatId(props.getProperty("telegramChatId"));
 

@@ -6,42 +6,39 @@ import org.bson.Document;
 import processor.LogProcessor;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.function.Consumer;
 
 public class NoSqlDBProcessor implements LogProcessor {
 
     @Override
-    public List<LogEvent> process(String connectionString, List<String> levels) throws Exception {
-
-        List<LogEvent> events = new ArrayList<>();
+    public void process(String connectionString,
+                        String encoding,
+                        Consumer<LogEvent> consumer) throws Exception {
 
         try (MongoClient mongoClient = MongoClients.create(connectionString)) {
 
-            MongoIterable<String> databaseNames = mongoClient.listDatabaseNames();
+            System.out.println("Подключение к MongoDB");
+
+            MongoIterable<String> databaseNames =
+                    mongoClient.listDatabaseNames();
 
             for (String dbName : databaseNames) {
 
-                MongoDatabase database = mongoClient.getDatabase(dbName);
+                MongoDatabase database =
+                        mongoClient.getDatabase(dbName);
 
-                List<String> collections =
-                        database.listCollectionNames().into(new ArrayList<>());
+                for (String collectionName : database.listCollectionNames()) {
 
-                for (String collectionName : collections) {
-
-                    searchCollection(database, collectionName, levels, events);
+                    processCollection(database, collectionName, consumer);
                 }
             }
-
         }
-
-        return events;
     }
 
-    private void searchCollection(MongoDatabase database,
-                                  String collectionName,
-                                  List<String> levels,
-                                  List<LogEvent> events) {
+    // Коллекция
+    private void processCollection(MongoDatabase database,
+                                   String collectionName,
+                                   Consumer<LogEvent> consumer) {
 
         MongoCollection<Document> collection =
                 database.getCollection(collectionName);
@@ -54,24 +51,20 @@ public class NoSqlDBProcessor implements LogProcessor {
                 Document doc = cursor.next();
 
                 String json = doc.toJson();
-                String lower = json.toLowerCase();
 
-                boolean match = levels.stream()
-                        .anyMatch(level -> lower.contains(level.toLowerCase()));
+                if (json == null || json.isBlank()) continue;
 
-                if (match) {
-
-                    events.add(new LogEvent(
-                            Instant.now(),
-                            "MONGO",
-                            "UNKNOWN",
-                            json
-                    ));
-                }
+                consumer.accept(new LogEvent(
+                        Instant.now(),
+                        "MONGO",
+                        "UNKNOWN",
+                        json
+                ));
             }
 
         } catch (Exception e) {
-            System.err.println("Ошибка в коллекции " + collectionName + ": " + e.getMessage());
+            System.err.println(" Ошибка коллекции: " + collectionName);
+            e.printStackTrace();
         }
     }
 }
