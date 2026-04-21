@@ -1,27 +1,38 @@
 package normalizer;
 
+import normalizer.level.LevelParser;
+import normalizer.level.JsonLevelParser;
+import normalizer.level.RegexLevelParser;
+
 import java.util.List;
 
 public class LevelExtractor {
 
-    public static String extract(String message, List<String> levels) {
+    private final List<LevelParser> parsers;
 
-        String lowerMessage = message.toLowerCase();
+    public LevelExtractor(List<String> levels) {
 
-        for (String level : levels) {
+        this.parsers = List.of(
+                new JsonLevelParser(),      // быстрый
+                new RegexLevelParser(levels) // универсальный
+        );
+    }
 
-            String lowerLevel = level.toLowerCase();
+    public String extract(String message) {
 
-            // более точное совпадение
-            if (containsWord(lowerMessage, lowerLevel)) {
-                return level.toUpperCase();
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+
+        for (LevelParser parser : parsers) {
+
+            String level = parser.parse(message);
+
+            if (level != null) {
+                return level;
             }
         }
 
         return null;
-    }
-
-    private static boolean containsWord(String text, String word) {
-        return text.matches(".*\\b" + word + "\\b.*");
     }
 }

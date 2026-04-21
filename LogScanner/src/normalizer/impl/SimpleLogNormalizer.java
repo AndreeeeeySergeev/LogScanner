@@ -10,14 +10,18 @@ import normalizer.timestamp.TimestampParseResult;
 import java.time.Instant;
 import java.util.List;
 
-public class SimpleLogNormalizer implements LogNormalizer {
 
-    private final List<String> levels;
+public class SimpleLogNormalizer implements LogNormalizer {
+    private final LevelExtractor levelExtractor;
+    private final SourceDetector sourceDetector;
+
     private final TimestampExtractor extractor = new TimestampExtractor();
 
     public SimpleLogNormalizer(List<String> levels) {
-        this.levels = levels;
+        this.levelExtractor  = new LevelExtractor(levels);
+        this.sourceDetector = new SourceDetector();
     }
+
 
     @Override
     public LogEvent normalize(LogEvent event) {
@@ -31,7 +35,7 @@ public class SimpleLogNormalizer implements LogNormalizer {
         // LEVEL (не перетираем, если уже есть)
         String level = event.getLevel();
         if (level == null) {
-            level = LevelExtractor.extract(message, levels);
+            level = levelExtractor.extract(message);
         }
 
         // ФИЛЬТРАЦИЯ
@@ -48,7 +52,7 @@ public class SimpleLogNormalizer implements LogNormalizer {
         // SOURCE (не перетираем)
         String source = event.getSource();
         if (source == null) {
-            source = SourceDetector.detect(message);
+            source = sourceDetector.detect(message);
         }
 
         return new LogEvent(timestamp, source, level, message);
