@@ -3,10 +3,14 @@ package processor.factory;
 import config.AppConfig;
 import processor.LogProcessor;
 import processor.impl.*;
+import processor.filter.FilteredLogProcessor;
+import processor.filter.LevelMatcher;
 
 public class LogProcessorFactory {
 
     public static LogProcessor getProcessor(String format, AppConfig config) {
+
+        LogProcessor base;
 
         switch (format.toLowerCase()) {
 
@@ -14,16 +18,19 @@ public class LogProcessorFactory {
             case "txt":
             case "log":
             case "csv":
-                return new TextLogProcessor();
+                base = new TextLogProcessor();
+                break;
 
 
             // JSON
             case "json":
-                return new JsonLogProcessor();
+                base = new JsonLogProcessor();
+                break;
 
             // XML
             case "xml":
-                return new XmlLogProcessor();
+                base = new XmlLogProcessor();
+                break;
 
             // RELATIONAL DB
             case "sql":
@@ -35,23 +42,30 @@ public class LogProcessorFactory {
             case "ibd":
             case "db":
             case "sqlite":
-                return buildDbProcessor(config);
+                base =  buildDbProcessor(config);
+                break;
 
             // NoSQL
             case "wt":
             case "couch":
             case "bson":
-                return buildMongoProcessor(config);
+                base =  buildMongoProcessor(config);
+                break;
 
             // Graph
             case "store":
             case "index":
-                return buildGraphProcessor(config);
+                base = buildGraphProcessor(config);
+                break;
 
             default:
                 throw new IllegalArgumentException(
                         "Неподдерживаемый формат: " + format);
         }
+        return new FilteredLogProcessor(
+                base,
+                new LevelMatcher(config.getLevels())
+        );
     }
 
 

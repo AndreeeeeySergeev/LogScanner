@@ -22,10 +22,6 @@ public class LevelExtractor {
     }
 
     private static boolean containsWord(String text, String word) {
-
-        return text.equals(word)
-                || text.startsWith(word + " ")
-                || text.endsWith(" " + word)
-                || text.contains(" " + word + " ");
+        return text.matches(".*\\b" + word + "\\b.*");
     }
 }

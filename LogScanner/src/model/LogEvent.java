@@ -34,7 +34,7 @@ public class LogEvent {
         this(timestamp, source, level, message, null);
     }
 
-    // ещё более простой (для processor'ов)
+    // (для processor'ов)
     public LogEvent(String message) {
         this(null, null, null, message, null);
     }
