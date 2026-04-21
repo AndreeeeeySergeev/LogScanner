@@ -10,9 +10,11 @@ import java.util.function.Consumer;
 public class CompositeGraphProcessor implements LogProcessor {
 
     private final List<GraphSource> sources;
+    private final List<String> levels;
 
-    public CompositeGraphProcessor(List<GraphSource> sources) {
+    public CompositeGraphProcessor(List<GraphSource> sources, List<String> levels) {
         this.sources = sources;
+        this.levels = levels;
     }
 
     @Override
@@ -25,7 +27,8 @@ public class CompositeGraphProcessor implements LogProcessor {
             try {
                 LogProcessor processor = new GraphLogProcessor(
                         source.getUser(),
-                        source.getPassword()
+                        source.getPassword(),
+                        levels
                 );
 
                 processor.process(source.getUri(), null, consumer);

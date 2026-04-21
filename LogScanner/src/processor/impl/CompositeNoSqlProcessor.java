@@ -10,9 +10,11 @@ import java.util.function.Consumer;
 public class CompositeNoSqlProcessor implements LogProcessor {
 
     private final List<MongoSource> sources;
+    private final List<String> levels;
 
-    public CompositeNoSqlProcessor(List<MongoSource> sources) {
+    public CompositeNoSqlProcessor(List<MongoSource> sources, List<String> levels) {
         this.sources = sources;
+        this.levels = levels;
     }
 
     @Override
@@ -23,7 +25,7 @@ public class CompositeNoSqlProcessor implements LogProcessor {
             System.out.println("Mongo: " + source.getName());
 
             try {
-                LogProcessor processor = new NoSqlDBProcessor();
+                LogProcessor processor = new NoSqlDBProcessor(levels);
 
                 processor.process(source.getUri(), null, consumer);
 

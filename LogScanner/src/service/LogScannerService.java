@@ -92,7 +92,8 @@ public class LogScannerService {
                     LogProcessor processor =
                             new RelationalDbProcessor(
                                     db.getUser(),
-                                    db.getPassword()
+                                    db.getPassword(),
+                                    config.getLevels()
                             );
 
                     processor.process(db.getUrl(), null, event -> {
@@ -125,7 +126,7 @@ public class LogScannerService {
                     System.out.println("Подключение к Mongo: " + mongo.getName());
 
                     try {
-                        LogProcessor processor = new NoSqlDBProcessor();
+                        LogProcessor processor = new NoSqlDBProcessor(config.getLevels());
 
                         processor.process(mongo.getUri(), null, event -> {
 

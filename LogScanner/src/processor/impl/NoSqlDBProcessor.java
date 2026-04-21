@@ -1,14 +1,39 @@
 package processor.impl;
 
 import com.mongodb.client.*;
+import config.MongoSource;
 import model.LogEvent;
 import org.bson.Document;
 import processor.LogProcessor;
+import org.bson.conversions.Bson;
+import static com.mongodb.client.model.Filters.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.function.Consumer;
 
 public class NoSqlDBProcessor implements LogProcessor {
+    private final List<String> levels;
+
+    public NoSqlDBProcessor(List<String> levels) {
+        this.levels = levels;
+    }
+
+    private Bson buildFilter() {
+
+        if (levels == null || levels.isEmpty()) {
+            return new Document();
+        }
+
+        String pattern = String.join("|", levels);
+
+        // $expr + $regexMatch по всему JSON (через toString)
+        return expr(new Document("$regexMatch",
+                new Document("input", new Document("$toString", "$$ROOT"))
+                        .append("regex", pattern)
+                        .append("options", "i")
+        ));
+    }
 
     @Override
     public void process(String connectionString,
@@ -44,7 +69,7 @@ public class NoSqlDBProcessor implements LogProcessor {
                 database.getCollection(collectionName);
 
         try (MongoCursor<Document> cursor =
-                     collection.find().limit(1000).iterator()) {
+                     collection.find(buildFilter()).limit(1000).iterator()) {
 
             while (cursor.hasNext()) {
 

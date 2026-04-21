@@ -14,10 +14,34 @@ public class GraphLogProcessor implements LogProcessor {
 
     private final String username;
     private final String password;
+    private final List<String> levels;
 
-    public GraphLogProcessor(String username, String password) {
+    public GraphLogProcessor(String username, String password, List<String> levels) {
         this.username = username;
         this.password = password;
+        this.levels = levels;
+    }
+
+    private String buildWhereClause() {
+
+        if (levels == null || levels.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder where = new StringBuilder(" WHERE ");
+
+        for (int i = 0; i < levels.size(); i++) {
+
+            if (i > 0) {
+                where.append(" OR ");
+            }
+
+            where.append("toLower(toString(n)) CONTAINS '")
+                    .append(levels.get(i).toLowerCase())
+                    .append("'");
+        }
+
+        return where.toString();
     }
 
     @Override
@@ -30,7 +54,9 @@ public class GraphLogProcessor implements LogProcessor {
 
             System.out.println(" Подключение к Graph DB");
 
-            String query = "MATCH (n) RETURN labels(n) AS labels, n{.*} AS props LIMIT 1000";
+            String query = "MATCH (n)"
+                    + buildWhereClause()
+                    + " RETURN labels(n) AS labels, n{.*} AS props LIMIT 1000";
 
             Result result = session.run(query);
 

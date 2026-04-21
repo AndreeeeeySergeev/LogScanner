@@ -78,7 +78,8 @@ public class LogProcessorFactory {
 
         return new RelationalDbProcessor(
                 config.getDbUser(),
-                config.getDbPassword()
+                config.getDbPassword(),
+                config.getLevels()
         );
     }
 
@@ -88,7 +89,7 @@ public class LogProcessorFactory {
             throw new RuntimeException("graph.sources не задан");
         }
 
-        return new CompositeGraphProcessor(config.getGraphSources());
+        return new CompositeGraphProcessor(config.getGraphSources(), config.getLevels());
     }
 
     private static LogProcessor buildMongoProcessor(AppConfig config) {
@@ -97,6 +98,6 @@ public class LogProcessorFactory {
             throw new RuntimeException("mongo.sources не заданы");
         }
 
-        return new CompositeNoSqlProcessor(config.getMongoSources());
+        return new CompositeNoSqlProcessor(config.getMongoSources(), config.getLevels());
     }
 }

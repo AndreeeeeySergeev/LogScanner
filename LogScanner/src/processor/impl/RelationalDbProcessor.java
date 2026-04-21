@@ -13,10 +13,34 @@ public class RelationalDbProcessor implements LogProcessor {
 
     private final String username;
     private final String password;
+    private final List<String> levels;
 
-    public RelationalDbProcessor(String username, String password) {
+    public RelationalDbProcessor(String username, String password, List <String> levels) {
         this.username = username;
         this.password = password;
+        this.levels = levels;
+    }
+
+    private String buildWhereClause(String column) {
+
+        if (levels == null || levels.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder where = new StringBuilder(" WHERE ");
+
+        for (int i = 0; i < levels.size(); i++) {
+
+            if (i > 0) {
+                where.append(" OR ");
+            }
+
+            where.append("LOWER(")
+                    .append(column)
+                    .append(") LIKE ?");
+        }
+
+        return where.toString();
     }
 
     @Override
@@ -91,23 +115,32 @@ public class RelationalDbProcessor implements LogProcessor {
                                String column,
                                Consumer<LogEvent> consumer) throws SQLException {
 
-        String query = "SELECT " + column + " FROM " + tableName;
+        String query = "SELECT " + column + " FROM " + tableName
+                + buildWhereClause(column);
 
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(query)) {
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
 
-            while (rs.next()) {
+            if (levels != null && !levels.isEmpty()) {
+                for (int i = 0; i < levels.size(); i++) {
+                    stmt.setString(i + 1, "%" + levels.get(i).toLowerCase() + "%");
+                }
+            }
 
-                String value = rs.getString(1);
+            try (ResultSet rs = stmt.executeQuery()) {
 
-                if (value == null || value.isBlank()) continue;
+                while (rs.next()) {
 
-                consumer.accept(new LogEvent(
-                        Instant.now(),
-                        "REL_DB",
-                        "UNKNOWN",
-                        value
-                ));
+                    String value = rs.getString(1);
+
+                    if (value == null || value.isBlank()) continue;
+
+                    consumer.accept(new LogEvent(
+                            Instant.now(),
+                            "REL_DB",
+                            "UNKNOWN",
+                            value
+                    ));
+                }
             }
         }
     }
