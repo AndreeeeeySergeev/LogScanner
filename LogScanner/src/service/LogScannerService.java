@@ -159,7 +159,8 @@ public class LogScannerService {
                         LogProcessor processor =
                                 new GraphLogProcessor(
                                         graph.getUser(),
-                                        graph.getPassword()
+                                        graph.getPassword(),
+                                        config.getLevels()
                                 );
 
                         processor.process(graph.getUri(), null, event -> {

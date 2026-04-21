@@ -24,12 +24,12 @@ public class LogProcessorFactory {
 
             // JSON
             case "json":
-                base = new JsonLogProcessor();
+                base = new JsonLogProcessor(config.getLevels());
                 break;
 
             // XML
             case "xml":
-                base = new XmlLogProcessor();
+                base = new XmlLogProcessor(config.getLevels());
                 break;
 
             // RELATIONAL DB

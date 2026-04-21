@@ -8,9 +8,16 @@ import processor.LogProcessor;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import java.io.File;
+import java.util.List;
 import java.util.function.Consumer;
 
 public class XmlLogProcessor implements LogProcessor {
+
+    private final List<String> levels;
+
+    public XmlLogProcessor(List<String> levels) {
+        this.levels = levels;
+    }
 
     @Override
     public void process(String filePath,
@@ -29,20 +36,31 @@ public class XmlLogProcessor implements LogProcessor {
         DefaultHandler handler = new DefaultHandler() {
 
             private StringBuilder buffer = new StringBuilder();
+            private int depth = 0;
 
             @Override
             public void startElement(String uri, String localName,
                                      String qName, Attributes attributes) {
 
-                buffer.setLength(0);
-
-                for (int i = 0; i < attributes.getLength(); i++) {
-                    String value = attributes.getValue(i);
-
-                    if (value != null && !value.isBlank()) {
-                        consumer.accept(new LogEvent(null, null, null, value));
-                    }
+                // начинаем новый event на верхнем уровне
+                if (depth == 0) {
+                    buffer.setLength(0);
                 }
+
+                depth++;
+
+                buffer.append("<").append(qName);
+
+                // атрибуты
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    buffer.append(" ")
+                            .append(attributes.getQName(i))
+                            .append("=\"")
+                            .append(attributes.getValue(i))
+                            .append("\"");
+                }
+
+                buffer.append(">");
             }
 
             @Override
@@ -53,14 +71,45 @@ public class XmlLogProcessor implements LogProcessor {
             @Override
             public void endElement(String uri, String localName, String qName) {
 
-                String text = buffer.toString().trim();
+                buffer.append("</").append(qName).append(">");
 
-                if (!text.isEmpty()) {
-                    consumer.accept(new LogEvent(null, null, null, text));
+                depth--;
+
+                // 🔥 закрыли верхнеуровневый элемент → это событие
+                if (depth == 0) {
+
+                    String event = buffer.toString().trim();
+
+                    if (!event.isEmpty() && matchesLevel(event)) {
+                        consumer.accept(new LogEvent(event));
+                    }
+
+                    buffer.setLength(0);
                 }
             }
         };
 
         saxParser.parse(new File(filePath), handler);
+    }
+
+    // =========================
+    // PRE-FILTER (лёгкий)
+    // =========================
+
+    private boolean matchesLevel(String message) {
+
+        if (levels == null || levels.isEmpty()) {
+            return true;
+        }
+
+        String lower = message.toLowerCase();
+
+        for (String level : levels) {
+            if (lower.contains(level.toLowerCase())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
