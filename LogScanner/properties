@@ -1,5 +1,5 @@
 # файлы
-inputDir=logs
+inputDir=./test-data
 outputFile=output/result.log
 
 # DB

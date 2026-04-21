@@ -9,7 +9,7 @@ public class Main {
 
         try {
             // 1. Путь к конфигу
-            String configPath = "config/properties";
+            String configPath = "properties";
 
             if (args.length > 0) {
                 configPath = args[0];
@@ -18,7 +18,6 @@ public class Main {
             System.out.println("⚙️ Загрузка конфигурации: " + configPath);
 
             // 2. Загружаем config
-            // =========================
             AppConfig config = ConfigLoader.load(configPath);
 
             // 3. Запуск сервиса
