@@ -75,7 +75,7 @@ public class XmlLogProcessor implements LogProcessor {
 
                 depth--;
 
-                // 🔥 закрыли верхнеуровневый элемент → это событие
+                // закрыли верхнеуровневый элемент → это событие
                 if (depth == 0) {
 
                     String event = buffer.toString().trim();
@@ -92,10 +92,7 @@ public class XmlLogProcessor implements LogProcessor {
         saxParser.parse(new File(filePath), handler);
     }
 
-    // =========================
     // PRE-FILTER (лёгкий)
-    // =========================
-
     private boolean matchesLevel(String message) {
 
         if (levels == null || levels.isEmpty()) {
