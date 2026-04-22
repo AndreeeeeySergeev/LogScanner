@@ -60,7 +60,7 @@ public class SimpleLogNormalizer implements LogNormalizer {
         String source = event.getSource();
 
         if (source == null) {
-            source = sourceDetector.detect(message);
+            source = sourceDetector.detect(event);
         }
 
         if (source == null || source.isBlank()) {

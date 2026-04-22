@@ -1,9 +1,9 @@
-[2026-04-22T04:45:31.932463800Z] [test..xml] [INFO] INFO Start
-[2026-04-22T04:45:31.941747900Z] [test..xml] [ERROR] ERROR Failure detected
-[2026-04-22T04:45:57.349513500Z] [test..xml] [CRITICAL] CRITICAL System down
-[2026-04-22T04:46:20.957095400Z] [test.json] [INFO] INFO ok
-[2026-04-22T04:46:20.957095400Z] [test.json] [ERROR] ERROR fail
-[2026-04-22T04:46:44.455909900Z] [test.json] [CRITICAL] CRITICAL boom
-[2026-04-22T04:47:07.862104600Z] [test.log] [INFO] INFO Application started
-[2026-04-22T04:47:07.862104600Z] [test.log] [ERROR] ERROR Database connection failed
-[2026-04-22T04:47:31.596436600Z] [test.log] [CRITICAL] CRITICAL Security breach detected
+[2026-04-22T04:04:28.092304200Z] [test..xml] [INFO] INFO Start
+[2026-04-22T04:04:28.092304200Z] [test..xml] [ERROR] ERROR Failure detected
+[2026-04-22T04:04:53.214394200Z] [test..xml] [CRITICAL] CRITICAL System down
+[2026-04-22T04:06:34.152973200Z] [test.json] [INFO] INFO ok
+[2026-04-22T04:06:34.152973200Z] [test.json] [ERROR] ERROR fail
+[2026-04-22T04:06:57.776708400Z] [test.json] [CRITICAL] CRITICAL boom
+[2026-04-22T04:07:21.323321200Z] [test.log] [INFO] INFO Application started
+[2026-04-22T04:07:21.323321200Z] [test.log] [ERROR] ERROR Database connection failed
+[2026-04-22T04:07:44.793088200Z] [test.log] [CRITICAL] CRITICAL Security breach detected
