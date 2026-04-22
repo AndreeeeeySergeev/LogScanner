@@ -180,7 +180,10 @@ public class JsonLogProcessor implements LogProcessor {
                             finalMessage = message;
                         }
 
-                        consumer.accept(new LogEvent(finalMessage));
+                        consumer.accept(new LogEvent(  null,
+                                "FILE",
+                                null,
+                                finalMessage));
                     }
 
                     // сброс

@@ -82,7 +82,7 @@ public class NoSqlDBProcessor implements LogProcessor {
                 consumer.accept(new LogEvent(
                         Instant.now(),
                         "MONGO",
-                        "UNKNOWN",
+                        null,
                         json
                 ));
             }

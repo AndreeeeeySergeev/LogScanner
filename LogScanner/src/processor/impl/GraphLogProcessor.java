@@ -77,7 +77,7 @@ public class GraphLogProcessor implements LogProcessor {
                 consumer.accept(new LogEvent(
                         Instant.now(),
                         "GRAPH_DB",
-                        "UNKNOWN",
+                        null,
                         message
                 ));
             }

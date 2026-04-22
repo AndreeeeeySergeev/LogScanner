@@ -26,7 +26,7 @@ public class TextLogProcessor implements LogProcessor {
 
                 consumer.accept(new LogEvent(
                         null,
-                        null,
+                        "FILE",
                         null,
                         line
                 ));

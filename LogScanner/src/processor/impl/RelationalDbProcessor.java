@@ -137,7 +137,7 @@ public class RelationalDbProcessor implements LogProcessor {
                     consumer.accept(new LogEvent(
                             Instant.now(),
                             "REL_DB",
-                            "UNKNOWN",
+                            null,
                             value
                     ));
                 }
