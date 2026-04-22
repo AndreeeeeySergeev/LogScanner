@@ -57,17 +57,14 @@ public class SimpleLogNormalizer implements LogNormalizer {
         }
 
         // SOURCE
-        String origin = event.getSource(); // FILE / DB / etc
-        String detected = sourceDetector.detect(message);
+        String source = event.getSource();
 
-        String source;
+        if (source == null) {
+            source = sourceDetector.detect(message);
+        }
 
-        if (origin != null && detected != null && !detected.equals("UNKNOWN")) {
-            source = origin + ":" + detected;
-        } else if (origin != null) {
-            source = origin;
-        } else {
-            source = detected;
+        if (source == null || source.isBlank()) {
+            source = "UNKNOWN";
         }
 
         // RESULT

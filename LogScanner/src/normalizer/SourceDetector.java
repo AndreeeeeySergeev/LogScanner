@@ -9,11 +9,11 @@ import java.util.Map;
 public class SourceDetector {
 
     private static final Map<String, List<String>> DEFAULT_SOURCES = Map.of(
-            "SIEM", List.of("splunk", "qradar"),
-            "EDR", List.of("crowdstrike"),
-            "FIREWALL", List.of("iptables", "firewall"),
-            "WAF", List.of("modsecurity"),
-            "DATABASE", List.of("db", "database")
+            "SIEM", List.of("splunk", "qradar", "arcSight"),
+            "EDR", List.of("crowdstrike", "sentinelone"),
+            "FIREWALL", List.of("iptables", "firewall", "paloalto"),
+            "WAF", List.of("modsecurity", "cloudflare"),
+            "DATABASE", List.of("postgres", "mysql", "db", "database")
     );
 
     private final List<SourceParser> parsers;

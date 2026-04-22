@@ -179,9 +179,9 @@ public class JsonLogProcessor implements LogProcessor {
                         } else {
                             finalMessage = message;
                         }
-
+                        String source = new File(filePath).getName();
                         consumer.accept(new LogEvent(  null,
-                                "FILE",
+                                source,
                                 null,
                                 finalMessage));
                     }

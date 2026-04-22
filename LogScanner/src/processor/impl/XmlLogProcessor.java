@@ -262,8 +262,9 @@ public class XmlLogProcessor implements LogProcessor {
                         message = text;
                     }
 
+                    String source = new File(filePath).getName();
                     consumer.accept(new LogEvent( null,
-                            "FILE",
+                            source,
                             null,
                             message));
                 }

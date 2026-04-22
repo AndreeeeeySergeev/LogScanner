@@ -4,6 +4,7 @@ import model.LogEvent;
 import processor.LogProcessor;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.function.Consumer;
@@ -24,9 +25,10 @@ public class TextLogProcessor implements LogProcessor {
 
                 if (line.trim().isEmpty()) continue;
 
+                String source = new File(filePath).getName();
                 consumer.accept(new LogEvent(
                         null,
-                        "FILE",
+                        source,
                         null,
                         line
                 ));
