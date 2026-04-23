@@ -3,10 +3,8 @@ package writer.impl;
 import model.LogEvent;
 import writer.LogWriter;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 
@@ -18,13 +16,17 @@ public class FileLogWriter implements LogWriter {
 
         File file = new File(outputPath);
 
-        // проверка существования директории (без создания)
         File parent = file.getParentFile();
         if (parent != null && !parent.exists()) {
             throw new IOException("Директория не существует: " + parent.getAbsolutePath());
         }
 
-        this.writer = new BufferedWriter(new FileWriter(file, true)); // append = true
+        this.writer = new BufferedWriter(
+                new OutputStreamWriter(
+                        new FileOutputStream(file, true),
+                        StandardCharsets.UTF_8
+                )
+        );
     }
 
     @Override
@@ -32,11 +34,10 @@ public class FileLogWriter implements LogWriter {
 
         if (event == null) return;
 
-        String formatted = format(event);
-
-        writer.write(formatted);
+        writer.write(format(event));
         writer.newLine();
-        writer.flush(); // важно для streaming
+
+        writer.flush();
     }
 
     private String format(LogEvent event) {
@@ -46,16 +47,12 @@ public class FileLogWriter implements LogWriter {
             timestamp = Instant.now();
         }
 
-        String source = safe(event.getSource());
-        String level = safe(event.getLevel());
-        String message = safe(event.getMessage());
-
         return String.format(
                 "[%s] [%s] [%s] %s",
                 DateTimeFormatter.ISO_INSTANT.format(timestamp),
-                source,
-                level,
-                message
+                safe(event.getSource()),
+                safe(event.getLevel()),
+                safe(event.getMessage())
         );
     }
 

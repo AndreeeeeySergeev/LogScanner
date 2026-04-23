@@ -29,7 +29,7 @@ public class LogProcessorFactory {
 
             // XML
             case "xml":
-                base = new XmlLogProcessor();
+                base = new XmlLogProcessor(config.getLevels());
                 break;
 
             // RELATIONAL DB

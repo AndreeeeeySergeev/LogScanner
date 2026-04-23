@@ -2,6 +2,7 @@ package processor.impl;
 
 import model.LogEvent;
 import processor.LogProcessor;
+import util.EncodingDetector;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -9,15 +10,24 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.function.Consumer;
 
+
 public class TextLogProcessor implements LogProcessor {
 
     @Override
     public void process(String filePath,
                         String encoding,
                         Consumer<LogEvent> consumer) throws Exception {
+        if (encoding == null || encoding.isBlank()) {
+            encoding = EncodingDetector.detectEncoding(filePath);
+        }
+
+        if (encoding == null) {
+            encoding = "UTF-8";
+        }
 
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(new FileInputStream(filePath), encoding))) {
+
 
             String line;
 
