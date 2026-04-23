@@ -40,8 +40,7 @@ public class JsonLogProcessor implements LogProcessor {
 
                     if (json == null || json.isBlank()) continue;
 
-                    // лёгкий pre-filter
-                    if (!containsLevel(json)) continue;
+
 
                     consumer.accept(new LogEvent(json));
                 }
@@ -74,13 +73,5 @@ public class JsonLogProcessor implements LogProcessor {
         return writer.toString();
     }
 
-    private boolean containsLevel(String text) {
 
-        String lower = text.toLowerCase();
-
-        return lower.contains("error")
-                || lower.contains("critical")
-                || lower.contains("warn")
-                || lower.contains("info");
-    }
 }
